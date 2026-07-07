@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrivateDrop Console — TokenOps Confidential Disperse</title>
+<style>
+:root {
+  --paper:       #F1ECDE;
+  --grid:        #DCD3BC;
+  --rule:        #C9BFA4;
+  --ink:         #1C1B17;
+  --ink-mid:     #6B6357;
+  --ink-faint:   #8B8375;
+  --live-bg:     #DCEEE1;
+  --live-fg:     #1F5B3C;
+  --amber-bg:    #F6E2C4;
+  --amber-fg:    #8A4A12;
+  --amber-bdr:   #C97A22;
+  --lv-bg:       #EBF0FA;
+  --lv-fg:       #1E3A6E;
+  --lv-bdr:      #4A6FA5;
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.gridpaper {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: -1px -1px;
+}
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 36px; }
+.eyebrow {
+  font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-mid); display: block; margin-bottom: 14px;
+}
+.section-label {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-mid); margin-bottom: 10px;
+}
+.muted   { color: var(--ink-mid); }
+.faint   { color: var(--ink-faint); }
+
+/* Hero */
+.hero { padding: 32px 0 24px; border-bottom: 1px solid var(--rule); }
+.hero h1 {
+  font-size: 28px; font-weight: 500; line-height: 1.25;
+  max-width: 580px; margin: 0 0 10px;
+}
+.hero p { color: var(--ink-mid); max-width: 540px; margin-bottom: 22px; }
+.cta-primary {
+  background: var(--ink); color: var(--paper);
+  border: 1px solid var(--ink); border-radius: 2px;
+  padding: 10px 18px; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  cursor: pointer; font-family: inherit;
+}
+.cta-primary:hover { opacity: 0.85; }
+
+/* Judge nav */
+.judge-nav { display: flex; gap: 6px; flex-wrap: wrap; padding: 16px 0; align-items: center; }
+.judge-nav a {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  text-decoration: none; border: 1px solid var(--rule); border-radius: 2px;
+  padding: 6px 10px; color: var(--ink-mid);
+}
+.judge-nav a:hover { border-color: var(--ink); color: var(--ink); }
+
+/* Problem strip */
+.problem {
+  padding: 10px 14px;
+  background: var(--amber-bg);
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  color: var(--amber-fg); font-size: 12px;
+}
+
+/* Sections */
+section { padding: 28px 0 0; scroll-margin-top: 20px; }
+
+/* Panels */
+.panel { border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+.panel-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; border-bottom: 1px solid var(--rule);
+}
+.panel-row:last-child { border-bottom: none; }
+
+/* Gate */
+.gate {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  border: 1px solid var(--rule); border-radius: 2px; overflow: hidden;
+}
+.gate-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  font-size: 11px;
+}
+.gate-item:nth-child(4n) { border-right: none; }
+.gate-live { font-size: 10px; font-weight: 500; letter-spacing: 0.06em; color: var(--live-fg); text-transform: uppercase; }
+
+/* Proof panel */
+.proof-panel {
+  position: relative; border: 1px solid var(--ink); border-radius: 2px;
+  padding: 20px 20px 16px; overflow: hidden;
+}
+.proof-grid {
+  position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 22px 22px; opacity: 0.45;
+}
+.trace-polyline {
+  stroke-dasharray: 2400; stroke-dashoffset: 2400;
+  animation: draw-trace 1.1s cubic-bezier(0.4,0,0.2,1) forwards;
+}
+@keyframes draw-trace { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .trace-polyline { animation: none; stroke-dashoffset: 0; }
+}
+.live-tag {
+  display: inline-block;
+  background: var(--live-bg); color: var(--live-fg);
+  border: 1px solid var(--live-fg);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 3px 8px;
+  animation: stamp 0.45s cubic-bezier(0.2,0,0,1) 1.1s both;
+}
+@keyframes stamp {
+  0%  { opacity: 0; transform: scale(0.82); }
+  65% { opacity: 1; transform: scale(1.04); }
+  100%{ opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .live-tag { animation: none; } }
+.lv-tag {
+  display: inline-block;
+  background: var(--lv-bg); color: var(--lv-fg);
+  border: 1px solid var(--lv-bdr);
+  font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 3px 8px;
+}
+.trace-legend {
+  font-size: 10px; color: var(--ink-faint); text-align: center;
+  margin-top: 12px; letter-spacing: 0.02em;
+}
+.trace-dot { cursor: crosshair; }
+.trace-dot:hover { fill: var(--live-fg); }
+
+/* Receipt */
+.receipt { border: 1px solid var(--ink); border-radius: 2px; padding: 20px 20px 16px; }
+.receipt-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 12px; flex-wrap: wrap;
+  padding-bottom: 14px; margin-bottom: 16px;
+  border-bottom: 1px dashed var(--rule);
+}
+.receipt-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-mid); }
+
+/* Handle pair */
+.handle-pair {
+  border: 1px solid var(--rule); border-radius: 2px; overflow: hidden;
+  margin-bottom: 16px;
+}
+.handle-pair-header {
+  background: var(--paper); border-bottom: 1px solid var(--rule);
+  padding: 6px 12px; font-size: 10px; color: var(--ink-faint);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.handle-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.handle-block { padding: 12px; border-right: 1px solid var(--rule); }
+.handle-block:last-child { border-right: none; }
+.handle-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 6px; }
+.handle-hex { font-size: 11px; word-break: break-all; margin-bottom: 8px; font-weight: 500; line-height: 1.5; }
+.handle-trace { display: block; width: 100%; }
+
+/* Field */
+.field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-faint); margin-bottom: 5px; }
+.field-value { font-size: 13px; margin-bottom: 14px; word-break: break-all; }
+
+/* Buttons */
+.copy-btn {
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--ink); border-radius: 2px;
+  padding: 8px 14px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: 0.06em; cursor: pointer; font-family: inherit;
+}
+.copy-btn:hover { background: var(--ink); color: var(--paper); }
+.copy-btn.copied { background: var(--live-bg); color: var(--live-fg); border-color: var(--live-fg); }
+
+/* Boundary */
+.boundary { border: 1px solid var(--amber-bdr); border-radius: 2px; padding: 16px 20px; background: var(--amber-bg); }
+.boundary-code { font-size: 14px; font-weight: 500; color: var(--amber-fg); margin-bottom: 8px; }
+.boundary-body { font-size: 13px; color: var(--amber-fg); line-height: 1.55; }
+
+/* LOCAL_VERIFIED notice */
+.lv-notice {
+  border: 1px solid var(--lv-bdr); border-radius: 2px;
+  padding: 12px 16px; background: var(--lv-bg);
+  margin-top: 12px;
+}
+.lv-notice-text { font-size: 12px; color: var(--lv-fg); line-height: 1.5; }
+
+/* Raw proof */
+details.raw { border: 1px solid var(--rule); border-radius: 2px; padding: 10px 14px; margin-top: 4px; }
+details.raw summary {
+  cursor: pointer; font-size: 11px; color: var(--ink-mid);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  list-style: none; display: flex; justify-content: space-between;
+}
+details.raw summary::after { content: "▸"; }
+details.raw[open] summary::after { content: "▾"; }
+.raw-body { margin-top: 12px; }
+.raw-row { font-size: 11px; color: var(--ink-mid); margin-bottom: 6px; word-break: break-all; }
+.raw-key { color: var(--ink-faint); display: inline-block; min-width: 190px; }
+
+/* Memory line */
+.memory-line { font-size: 18px; font-weight: 500; text-align: center; padding: 40px 0 50px; color: var(--ink); }
+
+/* Responsive */
+@media (max-width: 600px) {
+  .wrap { padding: 0 18px; }
+  .hero h1 { font-size: 22px; }
+  .handle-grid { grid-template-columns: 1fr; }
+  .handle-block { border-right: none; border-bottom: 1px solid var(--rule); }
+  .handle-block:last-child { border-bottom: none; }
+  .gate { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HERO — sponsor + proof-first -->
+<header class="hero gridpaper" style="margin:0 -36px; padding:32px 36px 24px;">
+  <span class="eyebrow">Built on TokenOps Confidential Disperse &nbsp;/&nbsp; Sepolia instrument log</span>
+  <h1>Distribute tokens. Prove it happened. Hide what was paid.</h1>
+  <p>Built on TokenOps Confidential Disperse. Every proof view is grounded in a live Sepolia transaction — no simulated payout data.</p>
+  <button class="cta-primary">Start sealed drop →</button>
+</header>
+
+<!-- JUDGE MODE NAV -->
+<nav class="judge-nav" aria-label="60-second judge walkthrough">
+  <span class="eyebrow" style="margin:0 6px 0 0;">Walk through:</span>
+  <a href="#composer">1 — Composer</a>
+  <a href="#readiness">2 — Readiness</a>
+  <a href="#spike">3 — Proof spike</a>
+  <a href="#receipt">4 — Sealed receipt</a>
+  <a href="#boundary">5 — Boundary</a>
+</nav>
+
+<!-- PROBLEM STRIP -->
+<div class="problem">
+  A typical token disperse exposes payout amounts on-chain.
+  PrivateDrop seals the amounts and keeps the proof visible.
+</div>
+
+<!-- PROOF SPIKE — above fold, first instrument shown -->
+<section id="spike">
+  <div class="section-label">Seismograph proof moment &nbsp;/&nbsp; TokenOps Confidential Disperse · Sepolia</div>
+  <div class="proof-panel">
+    <div class="proof-grid"></div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; position:relative; z-index:1; flex-wrap:wrap; gap:8px;">
+      <span style="font-size:11px; color:var(--ink-mid);">Disperse event &nbsp;·&nbsp; <span style="color:var(--ink);">0xb487…86f50</span></span>
+      <span class="live-tag">LIVE disperse tx</span>
+    </div>
+    <div style="position:relative;">
+      <!-- Main trace — 32 byte pairs of disperse tx 0xb487e9dc...86f50, verified in Node.js -->
+      <svg id="trace-svg" viewBox="0 0 640 150" width="100%" height="150"
+        preserveAspectRatio="none" role="img"
+        aria-label="Seismograph trace of 32 byte pairs from the live disperse transaction. Spike at byte 6 (0xfd, 253/255). Hover any point to see its byte value.">
+        <line x1="0" y1="100" x2="640" y2="100" stroke="#DCD3BC" stroke-width="1"/>
+        <line x1="0" y1="75"  x2="640" y2="75"  stroke="#DCD3BC" stroke-width="0.5" stroke-dasharray="4,8"/>
+        <!-- disperse tx polyline — byte-derived, miter joins, no smoothing -->
+        <polyline class="trace-polyline"
+          points="0,48 21,71 41,21 62,28 83,106 103,54 124,11 145,77 165,43 186,76 206,19 227,39 248,120 268,13 289,27 310,51 330,110 351,60 372,33 392,46 413,60 434,35 454,27 475,123 495,88 516,36 537,27 557,98 578,126 599,128 619,83 640,99"
+          fill="none" stroke="#1C1B17" stroke-width="2.5" stroke-linejoin="miter" stroke-linecap="square"/>
+        <!-- spike guide line at byte 6 (0xfd) x=124 -->
+        <line x1="124" y1="11" x2="124" y2="100" stroke="#1F5B3C" stroke-width="1" stroke-dasharray="3,4"/>
+        <!-- byte-pair dots — SVG title = native hover tooltip, zero JS -->
+        <circle class="trace-dot" cx="0"   cy="48"  r="3" fill="#1C1B17"><title>byte 0: 0xb4 (180/255)</title></circle>
+        <circle class="trace-dot" cx="21"  cy="71"  r="3" fill="#1C1B17"><title>byte 1: 0x87 (135/255)</title></circle>
+        <circle class="trace-dot" cx="41"  cy="21"  r="3" fill="#1C1B17"><title>byte 2: 0xe9 (233/255)</title></circle>
+        <circle class="trace-dot" cx="62"  cy="28"  r="3" fill="#1C1B17"><title>byte 3: 0xdc (220/255)</title></circle>
+        <circle class="trace-dot" cx="83"  cy="106" r="3" fill="#1C1B17"><title>byte 4: 0x43 (67/255)</title></circle>
+        <circle class="trace-dot" cx="103" cy="54"  r="3" fill="#1C1B17"><title>byte 5: 0xa8 (168/255)</title></circle>
+        <circle class="trace-dot" cx="124" cy="11"  r="5.5" fill="#1F5B3C" stroke="#1F5B3C" stroke-width="1"><title>byte 6: 0xfd (253/255) — peak byte, natural spike</title></circle>
+        <circle class="trace-dot" cx="145" cy="77"  r="3" fill="#1C1B17"><title>byte 7: 0x7b (123/255)</title></circle>
+        <circle class="trace-dot" cx="165" cy="43"  r="3" fill="#1C1B17"><title>byte 8: 0xbe (190/255)</title></circle>
+        <circle class="trace-dot" cx="186" cy="76"  r="3" fill="#1C1B17"><title>byte 9: 0x7d (125/255)</title></circle>
+        <circle class="trace-dot" cx="206" cy="19"  r="3" fill="#1C1B17"><title>byte 10: 0xed (237/255)</title></circle>
+        <circle class="trace-dot" cx="227" cy="39"  r="3" fill="#1C1B17"><title>byte 11: 0xc6 (198/255)</title></circle>
+        <circle class="trace-dot" cx="248" cy="120" r="3" fill="#1C1B17"><title>byte 12: 0x27 (39/255)</title></circle>
+        <circle class="trace-dot" cx="268" cy="13"  r="3" fill="#1C1B17"><title>byte 13: 0xf9 (249/255)</title></circle>
+        <circle class="trace-dot" cx="289" cy="27"  r="3" fill="#1C1B17"><title>byte 14: 0xde (222/255)</title></circle>
+        <circle class="trace-dot" cx="310" cy="51"  r="3" fill="#1C1B17"><title>byte 15: 0xaf (175/255)</title></circle>
+        <circle class="trace-dot" cx="330" cy="110" r="3" fill="#1C1B17"><title>byte 16: 0x3a (58/255)</title></circle>
+        <circle class="trace-dot" cx="351" cy="60"  r="3" fill="#1C1B17"><title>byte 17: 0x9d (157/255)</title></circle>
+        <circle class="trace-dot" cx="372" cy="33"  r="3" fill="#1C1B17"><title>byte 18: 0xd2 (210/255)</title></circle>
+        <circle class="trace-dot" cx="392" cy="46"  r="3" fill="#1C1B17"><title>byte 19: 0xb8 (184/255)</title></circle>
+        <circle class="trace-dot" cx="413" cy="60"  r="3" fill="#1C1B17"><title>byte 20: 0x9c (156/255)</title></circle>
+        <circle class="trace-dot" cx="434" cy="35"  r="3" fill="#1C1B17"><title>byte 21: 0xcd (205/255)</title></circle>
+        <circle class="trace-dot" cx="454" cy="27"  r="3" fill="#1C1B17"><title>byte 22: 0xdd (221/255)</title></circle>
+        <circle class="trace-dot" cx="475" cy="123" r="3" fill="#1C1B17"><title>byte 23: 0x22 (34/255)</title></circle>
+        <circle class="trace-dot" cx="495" cy="88"  r="3" fill="#1C1B17"><title>byte 24: 0x66 (102/255)</title></circle>
+        <circle class="trace-dot" cx="516" cy="36"  r="3" fill="#1C1B17"><title>byte 25: 0xcc (204/255)</title></circle>
+        <circle class="trace-dot" cx="537" cy="27"  r="3" fill="#1C1B17"><title>byte 26: 0xdd (221/255)</title></circle>
+        <circle class="trace-dot" cx="557" cy="98"  r="3" fill="#1C1B17"><title>byte 27: 0x53 (83/255)</title></circle>
+        <circle class="trace-dot" cx="578" cy="126" r="3" fill="#1C1B17"><title>byte 28: 0x1b (27/255)</title></circle>
+        <circle class="trace-dot" cx="599" cy="128" r="3" fill="#1C1B17"><title>byte 29: 0x18 (24/255)</title></circle>
+        <circle class="trace-dot" cx="619" cy="83"  r="3" fill="#1C1B17"><title>byte 30: 0x6f (111/255)</title></circle>
+        <circle class="trace-dot" cx="640" cy="99"  r="3" fill="#1C1B17"><title>byte 31: 0x50 (80/255)</title></circle>
+      </svg>
+      <p class="trace-legend">
+        Trace computed from transaction and encrypted handle bytes. Not random. Not decorative.
+        &nbsp;·&nbsp; Hover any point for its byte value.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- COMPOSER -->
+<section id="composer">
+  <div class="section-label">01 &nbsp;Composer</div>
+  <div class="panel">
+    <div class="panel-row">
+      <span>Recipient A &nbsp;<span class="faint">0xa58b…35Fe</span></span>
+      <span class="faint">amount visible until sealed</span>
+    </div>
+    <div class="panel-row">
+      <span>Recipient B &nbsp;<span class="faint">0x7C21…A90b</span></span>
+      <span class="faint">amount visible until sealed</span>
+    </div>
+  </div>
+  <p style="font-size:11px; color:var(--ink-faint); margin-top:7px;">Once sealed, no amount on this screen will show plaintext again.</p>
+</section>
+
+<!-- READINESS GATE -->
+<section id="readiness">
+  <div class="section-label">02 &nbsp;Readiness gate &nbsp;/&nbsp; TokenOps Confidential Disperse</div>
+  <div class="gate">
+    <div class="gate-item">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+        <circle cx="7" cy="7" r="5.5" fill="none" stroke="#1C1B17" stroke-width="1.2"/>
+        <circle cx="7" cy="7" r="1.8" fill="#1C1B17"/>
+      </svg>
+      isRegistered
+      <span class="gate-live">LIVE</span>
+    </div>
+    <div class="gate-item">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+        <polyline points="1,10 4,10 5.5,3 7,11 8.5,6 12,6" fill="none" stroke="#1C1B17" stroke-width="1.2" stroke-linejoin="miter"/>
+      </svg>
+      mintConfidential
+      <span class="gate-live">LIVE</span>
+    </div>
+    <div class="gate-item">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+        <line x1="2" y1="2" x2="12" y2="12" stroke="#1C1B17" stroke-width="1.2"/>
+        <line x1="2" y1="12" x2="12" y2="2" stroke="#1C1B17" stroke-width="1.2"/>
+      </svg>
+      setOperator
+      <span class="gate-live">LIVE</span>
+    </div>
+    <div class="gate-item">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+        <line x1="7" y1="1" x2="7" y2="13" stroke="#1C1B17" stroke-width="1.2"/>
+        <line x1="1" y1="7" x2="13" y2="7" stroke="#1C1B17" stroke-width="1.2"/>
+        <circle cx="7" cy="7" r="3" fill="none" stroke="#1C1B17" stroke-width="1"/>
+      </svg>
+      preflightDisperse
+      <span class="gate-live">LIVE &nbsp;ready=true</span>
+    </div>
+  </div>
+</section>
+
+<!-- SEALED RECEIPT -->
+<section id="receipt">
+  <div class="section-label">03 &nbsp;Sealed receipt &nbsp;/&nbsp; TokenOps Confidential Disperse</div>
+  <div class="receipt">
+    <div class="receipt-head">
+      <div>
+        <div class="receipt-title">Sealed receipt — measured at disperse confirmation</div>
+        <div style="font-size:11px; color:var(--ink-faint); margin-top:3px;">
+          Sepolia &nbsp;·&nbsp; CTTT test token &nbsp;·&nbsp; TokenOps Disperse singleton
+        </div>
+      </div>
+      <span class="live-tag" style="animation:none; flex-shrink:0;">LIVE</span>
+    </div>
+
+    <!-- Disperse tx -->
+    <div class="field-label">Disperse tx</div>
+    <div class="field-value" style="font-size:12px;">
+      0xb487e9dc43a8fd7bbe7dedc627f9deaf3a9dd2b89ccddd2266ccdd531b186f50
+    </div>
+
+    <!-- Recipient A handles — real encrypted values, deterministic mini-traces -->
+    <div class="handle-pair">
+      <div class="handle-pair-header">Recipient A &nbsp;·&nbsp; 0xa58b…35Fe</div>
+      <div class="handle-grid">
+        <div class="handle-block">
+          <div class="handle-label">Requested handle</div>
+          <!-- real encrypted handle from live disperse -->
+          <div class="handle-hex">0xb1f575d8…aa36a70500</div>
+          <!-- mini trace: derived from A_REQ handle bytes (verified Node.js) -->
+          <svg class="handle-trace" viewBox="0 0 260 24" height="24" preserveAspectRatio="none"
+            role="img" aria-label="Trace from Recipient A requested handle bytes">
+            <polyline
+              points="0,9 8,4 17,13 25,6 34,10 42,20 50,5 59,11 67,4 75,6 84,11 92,13 101,14 109,6 117,13 126,16 134,7 143,18 151,21 159,17 168,11 176,21 185,21 193,21 201,21 210,21 218,21 226,9 235,17 243,9 252,21 260,21"
+              fill="none" stroke="#1C1B17" stroke-width="1.5" stroke-linejoin="miter" stroke-linecap="square"/>
+          </svg>
+        </div>
+        <div class="handle-block">
+          <div class="handle-label">Transferred handle</div>
+          <div class="handle-hex">0xc489bf4c…aa36a70500</div>
+          <!-- mini trace: A_TFR bytes — spike at index 21 (0xff, 255/255) -->
+          <svg class="handle-trace" viewBox="0 0 260 24" height="24" preserveAspectRatio="none"
+            role="img" aria-label="Trace from Recipient A transferred handle bytes">
+            <polyline
+              points="0,7 8,11 17,8 25,16 34,6 42,7 50,3 59,5 67,12 75,17 84,6 92,3 101,6 109,7 117,15 126,6 134,12 143,15 151,5 159,10 168,11 176,3 185,21 193,21 201,21 210,21 218,21 226,9 235,17 243,9 252,21 260,21"
+              fill="none" stroke="#1C1B17" stroke-width="1.5" stroke-linejoin="miter" stroke-linecap="square"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recipient B handles -->
+    <div class="handle-pair">
+      <div class="handle-pair-header">Recipient B &nbsp;·&nbsp; 0x7C21…A90b</div>
+      <div class="handle-grid">
+        <div class="handle-block">
+          <div class="handle-label">Requested handle</div>
+          <div class="handle-hex">0x887eeefc…aa36a70500</div>
+          <!-- mini trace: B_REQ bytes — spike at index 7 (0xfe, 254/255) -->
+          <svg class="handle-trace" viewBox="0 0 260 24" height="24" preserveAspectRatio="none"
+            role="img" aria-label="Trace from Recipient B requested handle bytes">
+            <polyline
+              points="0,11 8,12 17,4 25,3 34,20 42,15 50,6 59,3 67,15 75,13 84,5 92,8 101,18 109,10 117,7 126,18 134,10 143,10 151,9 159,12 168,11 176,21 185,21 193,21 201,21 210,21 218,21 226,9 235,17 243,9 252,21 260,21"
+              fill="none" stroke="#1C1B17" stroke-width="1.5" stroke-linejoin="miter" stroke-linecap="square"/>
+          </svg>
+        </div>
+        <div class="handle-block">
+          <div class="handle-label">Transferred handle</div>
+          <div class="handle-hex">0x04580b82…aa36a70500</div>
+          <!-- mini trace: B_TFR bytes — spike at index 21 (0xff, 255/255) -->
+          <svg class="handle-trace" viewBox="0 0 260 24" height="24" preserveAspectRatio="none"
+            role="img" aria-label="Trace from Recipient B transferred handle bytes">
+            <polyline
+              points="0,21 8,15 17,20 25,12 34,12 42,20 50,18 59,7 67,18 75,7 84,6 92,11 101,17 109,14 117,16 126,7 134,12 143,9 151,11 159,15 168,3 176,3 185,21 193,21 201,21 210,21 218,21 226,9 235,17 243,9 252,21 260,21"
+              fill="none" stroke="#1C1B17" stroke-width="1.5" stroke-linejoin="miter" stroke-linecap="square"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recipients -->
+    <div class="field-label">Recipients (masked by default)</div>
+    <div class="field-value">
+      Recipient A &nbsp;0xa58b…35Fe &nbsp;&nbsp;·&nbsp;&nbsp; Recipient B &nbsp;0x7C21…A90b
+    </div>
+
+    <button class="copy-btn" id="copy-proof">Copy proof JSON</button>
+  </div>
+</section>
+
+<!-- BOUNDARY -->
+<section id="boundary">
+  <div class="section-label">04 &nbsp;Scope boundary</div>
+  <div class="boundary">
+    <!-- open-circuit flatline icon -->
+    <svg viewBox="0 0 240 18" width="140" height="18" style="display:block; margin-bottom:10px;" aria-hidden="true">
+      <line x1="0"   y1="9" x2="88"  y2="9" stroke="#8A4A12" stroke-width="2"/>
+      <circle cx="88"  cy="9" r="3" fill="none" stroke="#8A4A12" stroke-width="1.5"/>
+      <circle cx="152" cy="9" r="3" fill="none" stroke="#8A4A12" stroke-width="1.5"/>
+      <line x1="152" y1="9" x2="240" y2="9" stroke="#8A4A12" stroke-width="2"/>
+    </svg>
+    <div class="boundary-code">recipientDecrypt(): NOT IMPLEMENTED in this build</div>
+    <div class="boundary-body">
+      Scope boundary, by design: recipientDecrypt() is not implemented in this build.
+      Recipient addresses are masked in this UI as a display choice — not a cryptographic privacy claim.
+    </div>
+  </div>
+
+  <!-- LOCAL_VERIFIED notice — sender-authorized reveal path -->
+  <div class="lv-notice">
+    <span class="lv-tag" style="margin-right:8px; vertical-align:middle;">LOCAL_VERIFIED</span>
+    <span class="lv-notice-text">
+      Sender-authorized recipient reveal path is LOCAL_VERIFIED, but not live-tested in this submission.
+    </span>
+  </div>
+</section>
+
+<!-- RAW PROOF DRAWER -->
+<section style="padding-top:20px;">
+  <div class="section-label">05 &nbsp;Raw proof</div>
+  <details class="raw">
+    <summary>Raw proof — collapsed by default. Full tx hashes and contract addresses.</summary>
+    <div class="raw-body">
+      <div class="raw-row"><span class="raw-key">mint tx</span>0xbee597af3f0f17898385a2ed1f9790b0328d12df53ec67addf33e0842ae246f9</div>
+      <div class="raw-row"><span class="raw-key">approval tx</span>0x5f54ffdb95855af19e90d70fdddd2108d3478f10fa5d0592bbc7d4da2afe2d4a</div>
+      <div class="raw-row"><span class="raw-key">disperse tx</span>0xb487e9dc43a8fd7bbe7dedc627f9deaf3a9dd2b89ccddd2266ccdd531b186f50</div>
+      <div class="raw-row"><span class="raw-key">TokenOps singleton (Sepolia)</span>0x710dD9885Cc9986EfD234E7719483147a6d8DBb4</div>
+      <div class="raw-row"><span class="raw-key">CTTT token (Sepolia)</span>0x258F9D60dc023870e4E3109c894D834D5377361a</div>
+      <div class="raw-row"><span class="raw-key">Recipient A handle (req)</span>0xb1f575d89b0ee992f2da90726acf6c42c429023b8b000000000000aa36a70500</div>
+      <div class="raw-row"><span class="raw-key">Recipient A handle (tfr)</span>0xc489bf4cdacdfedf7d3cd2fdd6c453d37b4ee29b8eff0000000000aa36a70500</div>
+      <div class="raw-row"><span class="raw-key">Recipient B handle (req)</span>0x887eeefc0d4fdafe5572e5b92e99cc269899b1858d010000000000aa36a70500</div>
+      <div class="raw-row"><span class="raw-key">Recipient B handle (tfr)</span>0x04580b827a0b2fc430c3d78d346242cc7ea7875bf8ff0000000000aa36a70500</div>
+      <div class="raw-row faint"><span class="raw-key">recipient addresses</span>masked by default in all primary views</div>
+      <div class="raw-row faint"><span class="raw-key">recipientDecrypt()</span>NOT IMPLEMENTED — LIMITATION</div>
+      <div class="raw-row faint"><span class="raw-key">reveal path</span>LOCAL_VERIFIED — sender-authorized, not live-tested</div>
+    </div>
+  </details>
+</section>
+
+<p class="memory-line">The amount stayed sealed. The proof didn't.</p>
+
+</div><!-- /wrap -->
+
+<script>
+// Copy proof JSON — clean, no toast, inline state change only
+document.getElementById('copy-proof').addEventListener('click', function() {
+  const proof = {
+    project: 'PrivateDrop Console',
+    built_on: 'TokenOps Confidential Disperse',
+    network: 'Sepolia testnet',
+    token: 'CTTT (test token — not mainnet)',
+    disperse_singleton: '0x710dD9885Cc9986EfD234E7719483147a6d8DBb4',
+    evidence: {
+      mint_tx:     '0xbee597af3f0f17898385a2ed1f9790b0328d12df53ec67addf33e0842ae246f9',
+      approval_tx: '0x5f54ffdb95855af19e90d70fdddd2108d3478f10fa5d0592bbc7d4da2afe2d4a',
+      disperse_tx: '0xb487e9dc43a8fd7bbe7dedc627f9deaf3a9dd2b89ccddd2266ccdd531b186f50'
+    },
+    encrypted_handles: {
+      recipient_a_requested:   '0xb1f575d89b0ee992f2da90726acf6c42c429023b8b000000000000aa36a70500',
+      recipient_a_transferred: '0xc489bf4cdacdfedf7d3cd2fdd6c453d37b4ee29b8eff0000000000aa36a70500',
+      recipient_b_requested:   '0x887eeefc0d4fdafe5572e5b92e99cc269899b1858d010000000000aa36a70500',
+      recipient_b_transferred: '0x04580b827a0b2fc430c3d78d346242cc7ea7875bf8ff0000000000aa36a70500'
+    },
+    readiness: {
+      isRegistered:      'LIVE',
+      mintConfidential:  'LIVE',
+      setOperator:       'LIVE',
+      preflightDisperse: 'LIVE — ready=true blockers=[]'
+    },
+    limitations: {
+      recipientDecrypt:          'NOT_IMPLEMENTED — LIMITATION',
+      recipient_reveal_path:     'LOCAL_VERIFIED — sender-authorized, not live-tested in this submission',
+      recipient_address_privacy: 'DISPLAY_MASK_ONLY — not a cryptographic claim',
+      network:                   'Sepolia testnet — not mainnet',
+      token:                     'CTTT test token — not production asset'
+    }
+  };
+  navigator.clipboard.writeText(JSON.stringify(proof, null, 2)).then(() => {
+    const btn = document.getElementById('copy-proof');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied ✓';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1400);
+  });
+});
+
+// Expose deterministic helper globally — call updateHandles() if real handle values become available at runtime
+window.deriveTracePoints = function(hex, opts) {
+  var o = opts || {}, w = o.width||640, t = o.yTop||10, b = o.yBottom||140;
+  var c = hex.startsWith('0x') ? hex.slice(2) : hex, pairs = [], i;
+  for (i = 0; i < c.length; i += 2) pairs.push(c.slice(i, i+2));
+  var vals = pairs.map(function(p){ return parseInt(p,16); }), n = vals.length;
+  var pts = vals.map(function(v,i){
+    return { x: Math.round(i/(n-1)*w), y: Math.round(b-(v/255)*(b-t)), byte: pairs[i], value: v };
+  });
+  var si = vals.indexOf(Math.max.apply(null,vals));
+  return { points: pts, spikeIndex: si, spikePoint: pts[si] };
+};
+</script>
+</body>
+</html>

@@ -32,16 +32,17 @@ import { SEPOLIA_CHAIN_ID } from "./wagmi";
 import { buildZamaConfig, adaptZamaEncryptor } from "./zama";
 
 /**
- * PrivateDrop Console — LIVE-RUNNER panel.
+ * PrivateDrop Console — Sepolia Execution Console.
  *
- * NOT a final product UI. This is an execution console for Faadil to run the
- * live TokenOps Confidential Disperse spike on Sepolia by hand — connect a
- * real wallet, check registration, preflight a tiny 1-2 recipient batch, and
- * (only on explicit click, only when preflight.ready === true) send a real
- * disperse() transaction.
+ * Execution console for the live TokenOps Confidential Disperse flow on
+ * Sepolia — connect a real wallet, check registration, preflight a tiny 1-2
+ * recipient batch, and (only on explicit click, only when
+ * preflight.ready === true) send a real disperse() transaction.
  *
- * Not in scope here: Vault Room UI, Proof Stamp, marketing copy, final
- * visual design. See SPIKE-RESULT.md Section 10 for exactly what changed.
+ * This is the execution surface. The proof surface is docs/index.html
+ * (the Verifiable Seismograph proof UI).
+ *
+ * Not in scope: Vault Room UI, Proof Stamp, final visual design.
  */
 
 const DISPERSE_SINGLETON = requireFheDisperseSingletonAddress(SEPOLIA_CHAIN_ID);
@@ -64,6 +65,48 @@ type LogFn = (entry: Omit<EvidenceEntry, "id" | "timestamp">) => void;
 
 function bigintReplacer(_key: string, value: unknown) {
   return typeof value === "bigint" ? value.toString() : value;
+}
+
+function labelClass(label: EvidenceLabel): string {
+  switch (label) {
+    case "LIVE": return "tag tag-live";
+    case "LOCAL_VERIFIED": return "tag tag-lv";
+    case "BLOCKED": return "tag tag-blocked";
+    case "NOT_USED": return "tag tag-not-used";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step indicators
+// ---------------------------------------------------------------------------
+
+const STEPS = [
+  { num: 1, label: "Connect" },
+  { num: 2, label: "Register" },
+  { num: 3, label: "Mint" },
+  { num: 4, label: "Approve" },
+  { num: 5, label: "Preflight" },
+  { num: 6, label: "Disperse" },
+  { num: 7, label: "Evidence" },
+];
+
+function StepNav({ currentStep }: { currentStep: number }) {
+  return (
+    <nav className="step-nav" aria-label="Execution steps">
+      {STEPS.map((step, i) => (
+        <span key={step.num} style={{ display: "contents" }}>
+          {i > 0 && <span className="step-connector" />}
+          <span
+            className={`step-dot${step.num < currentStep ? " done" : ""}${step.num === currentStep ? " active" : ""}`}
+            title={step.label}
+            aria-label={`Step ${step.num}: ${step.label}`}
+          >
+            {step.num}
+          </span>
+        </span>
+      ))}
+    </nav>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -92,15 +135,31 @@ export function App() {
   const onSepolia = chainId === SEPOLIA_CHAIN_ID;
   const runnerReady = isConnected && onSepolia && !!publicClient && !!walletClient && !!address;
 
-  return (
-    <div style={{ fontFamily: "monospace", padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      <h1>PrivateDrop Console — LIVE-RUNNER</h1>
-      <p style={{ opacity: 0.7 }}>
-        TokenOps Confidential Disperse. Not WrapHub. Sepolia only. Execution controls, not final UI.
-      </p>
+  // Determine current step for the step indicator
+  const currentStep = !isConnected ? 1 : !onSepolia ? 1 : 2;
 
+  return (
+    <>
+      {/* Console header */}
+      <header className="console-header">
+        <span className="eyebrow">
+          TokenOps Confidential Disperse &nbsp;·&nbsp; Sepolia Execution Console
+        </span>
+        <h1>PrivateDrop Console</h1>
+        <p className="subtitle">
+          Sepolia testnet &nbsp;·&nbsp; CTTT test token &nbsp;·&nbsp; Not mainnet, not production
+        </p>
+        <a href="../" className="back-link">
+          ← Back to Verifiable Seismograph proof
+        </a>
+      </header>
+
+      <StepNav currentStep={runnerReady ? 3 : currentStep} />
+
+      {/* 01 — Environment */}
       <EnvironmentPanel chainId={chainId} address={address} />
 
+      {/* 02 — Wallet / network */}
       <WalletPanel
         isConnected={isConnected}
         connect={connect}
@@ -111,10 +170,12 @@ export function App() {
       />
 
       {!runnerReady && (
-        <p style={{ color: "darkorange" }}>
-          Connect a wallet on Sepolia (11155111) to unlock registration / faucet / preflight /
-          disperse panels below.
-        </p>
+        <div className="panel">
+          <p className="warn-msg">
+            Connect a wallet on Sepolia (11155111) to unlock registration, faucet,
+            preflight, and disperse panels below.
+          </p>
+        </div>
       )}
 
       {runnerReady && publicClient && walletClient && address && (
@@ -126,33 +187,59 @@ export function App() {
         />
       )}
 
+      {/* Scope boundary / limitations */}
+      <BoundaryPanel />
+
+      {/* Evidence log */}
       <EvidenceLogPanel log={log} />
-    </div>
+
+      <p className="memory-line">The amount stayed sealed. The proof didn't.</p>
+    </>
   );
 }
 
 export default App;
 
 // ---------------------------------------------------------------------------
-// 1. Environment panel
+// 01. Environment panel
 // ---------------------------------------------------------------------------
 
 function EnvironmentPanel({ chainId, address }: { chainId?: number; address?: Address }) {
   return (
-    <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-      <h2>1. Environment</h2>
-      <div>Current chain id: {chainId ?? "n/a"}</div>
-      <div>Connected wallet: {address ?? "n/a"}</div>
-      <div>Expected chain: Sepolia (11155111)</div>
-      <div>TokenOps Disperse singleton: {DISPERSE_SINGLETON}</div>
-      <div>CTTT token: {CTTT_ADDRESS ?? "NOT RESOLVED"}</div>
-      <div>TTT token (underlying): {TTT_ADDRESS ?? "NOT RESOLVED"}</div>
+    <section>
+      <div className="section-label">01 &nbsp;Environment</div>
+      <div className="panel">
+        <div className="panel-row">
+          <span className="panel-key">Current chain id</span>
+          <span className="panel-value">{chainId ?? "not connected"}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Connected wallet</span>
+          <span className="panel-value">{address ?? "not connected"}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Expected chain</span>
+          <span className="panel-value">Sepolia (11155111)</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">TokenOps Disperse singleton</span>
+          <span className="panel-value">{DISPERSE_SINGLETON}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">CTTT token</span>
+          <span className="panel-value">{CTTT_ADDRESS ?? "NOT RESOLVED"}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">TTT token (underlying)</span>
+          <span className="panel-value">{TTT_ADDRESS ?? "NOT RESOLVED"}</span>
+        </div>
+      </div>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 2. Wallet / network panel
+// 02. Wallet / network panel
 // ---------------------------------------------------------------------------
 
 function WalletPanel(props: {
@@ -167,21 +254,36 @@ function WalletPanel(props: {
   const { isConnected, connect, connectors, connectError, onSepolia, chainId } = props;
 
   return (
-    <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-      <h2>2. Wallet / network</h2>
-      {!isConnected ? (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {connectors.map((c) => (
-            <button key={c.uid} onClick={() => connect({ connector: c })}>
-              Connect {c.name}
-            </button>
-          ))}
+    <section>
+      <div className="section-label">02 &nbsp;Connect wallet</div>
+      <div className="panel">
+        {!isConnected ? (
+          <div className="connector-group">
+            {connectors.map((c) => (
+              <button key={c.uid} className="btn" onClick={() => connect({ connector: c })}>
+                Connect {c.name}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="panel-row">
+            <span className="panel-key">Connected</span>
+            <span className="panel-value">{address}</span>
+          </div>
+        )}
+        <div className="panel-row" style={{ marginTop: 8 }}>
+          <span className="panel-key">Chain</span>
+          <span className="panel-value">
+            {chainId ?? "n/a"} —{" "}
+            {onSepolia ? (
+              <span className="tag tag-live">Sepolia ✓</span>
+            ) : (
+              <span className="tag tag-blocked">Not Sepolia</span>
+            )}
+          </span>
         </div>
-      ) : (
-        <div>Connected: {address}</div>
-      )}
-      <div>Chain id: {chainId ?? "n/a"} — {onSepolia ? "✅ Sepolia" : "❌ not Sepolia (all actions blocked)"}</div>
-      {connectError && <div style={{ color: "crimson" }}>{connectError.message}</div>}
+        {connectError && <div className="error-msg">{connectError.message}</div>}
+      </div>
     </section>
   );
 }
@@ -222,7 +324,7 @@ function RunnerPanels({
 }
 
 // ---------------------------------------------------------------------------
-// 3. Registration panel
+// 03. Registration panel
 // ---------------------------------------------------------------------------
 
 function RegistrationPanel({ address, logEvent }: { address: Address; logEvent: LogFn }) {
@@ -270,25 +372,41 @@ function RegistrationPanel({ address, logEvent }: { address: Address; logEvent: 
   }
 
   return (
-    <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-      <h2>3. Registration</h2>
-      <button onClick={() => refetch()} disabled={isFetching}>
-        {isFetching ? "Checking..." : "Check isRegistered()"}
-      </button>
-      <div>isRegistered: {isRegistered === undefined ? "unknown" : String(isRegistered)}</div>
-      {isRegistered === false && (
-        <button onClick={handleRegister} disabled={register.isPending}>
-          {register.isPending ? "Sending register() tx..." : "register() — sends a real tx"}
-        </button>
-      )}
-      {register.data && <div>Last register tx: {register.data.hash}</div>}
-      {register.isError && <div style={{ color: "crimson" }}>{register.error?.message}</div>}
+    <section>
+      <div className="section-label">03 &nbsp;Registration</div>
+      <div className="panel">
+        <h2>
+          isRegistered()
+          {isRegistered !== undefined && (
+            <span className={isRegistered ? "tag tag-live" : "tag tag-blocked"}>
+              {isRegistered ? "REGISTERED" : "NOT REGISTERED"}
+            </span>
+          )}
+        </h2>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button className="btn" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? "Checking…" : "Check isRegistered()"}
+          </button>
+          {isRegistered === false && (
+            <button className="btn btn-primary" onClick={handleRegister} disabled={register.isPending}>
+              {register.isPending ? "Sending register() tx…" : "Register — sends a real tx"}
+            </button>
+          )}
+        </div>
+        {register.data && (
+          <div className="panel-row" style={{ marginTop: 8 }}>
+            <span className="panel-key">Last register tx</span>
+            <span className="panel-value">{register.data.hash}</span>
+          </div>
+        )}
+        {register.isError && <div className="error-msg">{register.error?.message}</div>}
+      </div>
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 4. Faucet / balance panel
+// 04. Faucet / balance panel
 // ---------------------------------------------------------------------------
 
 function FaucetPanel({ address, logEvent }: { address: Address; logEvent: LogFn }) {
@@ -328,33 +446,42 @@ function FaucetPanel({ address, logEvent }: { address: Address; logEvent: LogFn 
   }
 
   return (
-    <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-      <h2>4. Faucet / balance</h2>
-      <div>
-        Underlying TTT balance (raw 18dp units): {underlyingBalance?.toString() ?? "—"}
-        {underlyingError && <span style={{ color: "crimson" }}> ({underlyingError.message})</span>}
+    <section>
+      <div className="section-label">04 &nbsp;Mint CTTT</div>
+      <div className="panel">
+        <h2>Faucet / Balance</h2>
+        <div className="panel-row">
+          <span className="panel-key">Underlying TTT balance (raw 18dp)</span>
+          <span className="panel-value">
+            {underlyingBalance?.toString() ?? "—"}
+            {underlyingError && <span className="error-msg"> ({underlyingError.message})</span>}
+          </span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Confidential CTTT balance handle</span>
+          <span className="panel-value">
+            {confidentialHandle ?? "—"}
+            {confidentialError && <span className="error-msg"> ({confidentialError.message})</span>}
+          </span>
+        </div>
+        <p className="info-note" style={{ margin: "10px 0" }}>
+          The confidential balance is an encrypted handle, not a plaintext number. Decrypting
+          it via Zama's userDecrypt is <span className="tag tag-not-used">NOT_USED</span> in this
+          build — out of scope. The handle read itself is a real call once executed.
+        </p>
+        <button className="btn btn-primary" onClick={handleMint} disabled={mintConfidential.isPending}>
+          {mintConfidential.isPending ? "Minting…" : "Mint 1.0 CTTT — sends a real tx"}
+        </button>
+        {mintConfidential.isError && (
+          <div className="error-msg">{mintConfidential.error?.message}</div>
+        )}
       </div>
-      <div>
-        Confidential CTTT balance handle: {confidentialHandle ?? "—"}
-        {confidentialError && <span style={{ color: "crimson" }}> ({confidentialError.message})</span>}
-      </div>
-      <p style={{ opacity: 0.7, fontSize: "0.9em" }}>
-        NOTE: the confidential balance is an encrypted handle, not a plaintext number. Decrypting
-        it via Zama's userDecrypt is NOT_USED in this spike — out of scope. The handle read itself
-        is a real call once executed.
-      </p>
-      <button onClick={handleMint} disabled={mintConfidential.isPending}>
-        {mintConfidential.isPending ? "Minting..." : "mintConfidential(1.0 CTTT) — sends a real tx"}
-      </button>
-      {mintConfidential.isError && (
-        <div style={{ color: "crimson" }}>{mintConfidential.error?.message}</div>
-      )}
     </section>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 5 & 6. Preflight + Disperse panels
+// 05 & 06. Preflight + Disperse panels
 // ---------------------------------------------------------------------------
 
 function PreflightAndDispersePanels({
@@ -414,8 +541,8 @@ function PreflightAndDispersePanels({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preflight.data, preflight.error]);
 
-  // ---------------------------------------------------------------------
-  // 5b. Approval — token.setOperator(DISPERSE_SINGLETON, farFutureDeadline)
+  // -----------------------------------------------------------------------
+  // 05b. Approval — token.setOperator(DISPERSE_SINGLETON, farFutureDeadline)
   //
   // Confirmed from installed @tokenops/sdk/fhe/operators.d.ts (NOT guessed):
   // preflightDisperse's "direct" mode blocker
@@ -432,7 +559,7 @@ function PreflightAndDispersePanels({
   // between 3.0.0 and 3.2.0, inside @tokenops/sdk's own declared ^3.0.0 peer
   // range). See `src/erc7984-operator.ts` for the verbatim-copied
   // workaround and full discovery notes (SPIKE-RESULT.md Section 12).
-  // ---------------------------------------------------------------------
+  // -----------------------------------------------------------------------
   const approveOperator = useMutation({
     mutationFn: async () => {
       if (!CTTT_ADDRESS) throw new Error("CTTT address not resolved");
@@ -493,82 +620,185 @@ function PreflightAndDispersePanels({
 
   return (
     <>
-      <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-        <h2>5. Preflight (direct mode, 1-2 recipients)</h2>
-        <div>
-          Recipient 1:{" "}
-          <input value={recipient1} onChange={(e) => setRecipient1(e.target.value)} placeholder="0x..." size={44} />
-          {" "}Amount 1 (raw uint64 units):{" "}
-          <input value={amount1} onChange={(e) => setAmount1(e.target.value)} size={8} />
+      {/* 05. Preflight */}
+      <section>
+        <div className="section-label">05 &nbsp;Preflight (direct mode, 1–2 recipients)</div>
+        <div className="panel">
+          <div className="input-row">
+            <span className="input-label">Recipient 1</span>
+            <input
+              className="field-input"
+              value={recipient1}
+              onChange={(e) => setRecipient1(e.target.value)}
+              placeholder="0x…"
+              size={44}
+            />
+            <span className="input-label">Amount (raw uint64)</span>
+            <input
+              className="field-input"
+              value={amount1}
+              onChange={(e) => setAmount1(e.target.value)}
+              size={8}
+            />
+          </div>
+          <div className="input-row">
+            <span className="input-label">Recipient 2</span>
+            <input
+              className="field-input"
+              value={recipient2}
+              onChange={(e) => setRecipient2(e.target.value)}
+              placeholder="0x… (optional)"
+              size={44}
+            />
+            <span className="input-label">Amount</span>
+            <input
+              className="field-input"
+              value={amount2}
+              onChange={(e) => setAmount2(e.target.value)}
+              size={8}
+            />
+          </div>
+          <p className="info-note">Mode: direct (fixed for this execution)</p>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn" onClick={() => setPreflightEnabled(true)} disabled={recipients.length === 0}>
+              Run preflightDisperse()
+            </button>
+            {preflight.data && (
+              <span className={preflight.data.ready ? "tag tag-live" : "tag tag-blocked"}>
+                {preflight.data.ready ? "READY" : "NOT READY"}
+              </span>
+            )}
+          </div>
+          {preflight.data && (
+            <>
+              <div className="panel-row" style={{ marginTop: 10 }}>
+                <span className="panel-key">ready</span>
+                <span className="panel-value">{String(preflight.data.ready)}</span>
+              </div>
+              <div className="panel-row">
+                <span className="panel-key">blockers</span>
+                <span className="panel-value">
+                  {preflight.data.blockers.length ? preflight.data.blockers.join("; ") : "none"}
+                </span>
+              </div>
+              <div className="raw-output">
+                {JSON.stringify(preflight.data, bigintReplacer, 2)}
+              </div>
+            </>
+          )}
+          {preflight.isError && <div className="error-msg">{preflight.error?.message}</div>}
         </div>
-        <div>
-          Recipient 2 (optional):{" "}
-          <input value={recipient2} onChange={(e) => setRecipient2(e.target.value)} placeholder="0x..." size={44} />
-          {" "}Amount 2:{" "}
-          <input value={amount2} onChange={(e) => setAmount2(e.target.value)} size={8} />
-        </div>
-        <div>Mode: direct (fixed for this spike)</div>
-        <button onClick={() => setPreflightEnabled(true)} disabled={recipients.length === 0}>
-          Run preflightDisperse()
-        </button>
-        {preflight.data && (
-          <>
-            <div>ready: {String(preflight.data.ready)}</div>
-            <div>
-              blockers: {preflight.data.blockers.length ? preflight.data.blockers.join("; ") : "none"}
-            </div>
-            <pre style={{ background: "#111", color: "#0f0", padding: 8, overflow: "auto", maxHeight: 240 }}>
-              {JSON.stringify(preflight.data, bigintReplacer, 2)}
-            </pre>
-          </>
-        )}
-        {preflight.isError && <div style={{ color: "crimson" }}>{preflight.error?.message}</div>}
       </section>
 
+      {/* 05b. Approval */}
       {preflight.data && (
-        <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-          <h2>5b. Approval</h2>
-          <div>
-            hasApprovedSingleton (from last preflight):{" "}
-            {preflight.data.hasApprovedSingleton === null
-              ? "n/a (not direct mode)"
-              : String(preflight.data.hasApprovedSingleton)}
+        <section>
+          <div className="section-label">05b &nbsp;Approve TokenOps singleton</div>
+          <div className="panel">
+            <h2>
+              setOperator()
+              {preflight.data.hasApprovedSingleton !== null && (
+                <span className={preflight.data.hasApprovedSingleton ? "tag tag-live" : "tag tag-blocked"}>
+                  {preflight.data.hasApprovedSingleton ? "APPROVED" : "NOT APPROVED"}
+                </span>
+              )}
+            </h2>
+            <div className="panel-row">
+              <span className="panel-key">hasApprovedSingleton</span>
+              <span className="panel-value">
+                {preflight.data.hasApprovedSingleton === null
+                  ? "n/a (not direct mode)"
+                  : String(preflight.data.hasApprovedSingleton)}
+              </span>
+            </div>
+            {preflight.data.hasApprovedSingleton === false && (
+              <div style={{ marginTop: 10 }}>
+                <button className="btn btn-primary" onClick={() => approveOperator.mutate()} disabled={approveOperator.isPending}>
+                  {approveOperator.isPending
+                    ? "Sending setOperator() tx…"
+                    : "Approve TokenOps singleton as CTTT operator"}
+                </button>
+              </div>
+            )}
+            {approveOperator.data && (
+              <div className="panel-row" style={{ marginTop: 8 }}>
+                <span className="panel-key">Last approval tx</span>
+                <span className="panel-value">{approveOperator.data}</span>
+              </div>
+            )}
+            {approveOperator.isError && (
+              <div className="error-msg">{approveOperator.error?.message}</div>
+            )}
           </div>
-          {preflight.data.hasApprovedSingleton === false && (
-            <button onClick={() => approveOperator.mutate()} disabled={approveOperator.isPending}>
-              {approveOperator.isPending
-                ? "Sending setOperator() tx..."
-                : "Approve TokenOps singleton as CTTT operator"}
-            </button>
-          )}
-          {approveOperator.data && <div>Last approval tx: {approveOperator.data}</div>}
-          {approveOperator.isError && (
-            <div style={{ color: "crimson" }}>{approveOperator.error?.message}</div>
-          )}
         </section>
       )}
 
-      <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-        <h2>6. Disperse</h2>
-        <div style={{ opacity: 0.7, fontSize: "0.9em" }}>
-          Enabled only when preflight.ready === true. Never auto-sends — requires this explicit click.
+      {/* 06. Disperse */}
+      <section>
+        <div className="section-label">06 &nbsp;Execute disperse</div>
+        <div className="panel">
+          <h2>disperse() <span className="tag tag-live">LIVE TX</span></h2>
+          <p className="info-note" style={{ marginBottom: 10 }}>
+            Enabled only when preflight.ready === true. Never auto-sends — requires explicit click.
+          </p>
+          <button
+            className="btn btn-primary"
+            onClick={handleDisperse}
+            disabled={!preflight.data?.ready || disperse.isPending}
+          >
+            {disperse.isPending ? "Sending disperse() tx…" : "Execute disperse() — sends a real tx"}
+          </button>
+          {disperse.data && (
+            <div className="raw-output">
+              {JSON.stringify(disperse.data, bigintReplacer, 2)}
+            </div>
+          )}
+          {disperse.isError && <div className="error-msg">{disperse.error?.message}</div>}
         </div>
-        <button onClick={handleDisperse} disabled={!preflight.data?.ready || disperse.isPending}>
-          {disperse.isPending ? "Sending disperse() tx..." : "Execute disperse() — sends a real tx"}
-        </button>
-        {disperse.data && (
-          <pre style={{ background: "#111", color: "#0f0", padding: 8, overflow: "auto", maxHeight: 240 }}>
-            {JSON.stringify(disperse.data, bigintReplacer, 2)}
-          </pre>
-        )}
-        {disperse.isError && <div style={{ color: "crimson" }}>{disperse.error?.message}</div>}
       </section>
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 7. Evidence log panel
+// Scope boundary / limitations
+// ---------------------------------------------------------------------------
+
+function BoundaryPanel() {
+  return (
+    <section>
+      <div className="section-label">Scope boundary</div>
+      <div className="boundary-panel">
+        <h2>⚠ Limitations — read before judging</h2>
+        <div className="boundary-item">
+          <span className="boundary-bullet">▸</span>
+          <span>recipientDecrypt() is NOT IMPLEMENTED in this build</span>
+        </div>
+        <div className="boundary-item">
+          <span className="boundary-bullet">▸</span>
+          <span>Recipient addresses are masked in UI only — not a cryptographic privacy claim</span>
+        </div>
+        <div className="boundary-item">
+          <span className="boundary-bullet">▸</span>
+          <span>Sepolia testnet — not mainnet</span>
+        </div>
+        <div className="boundary-item">
+          <span className="boundary-bullet">▸</span>
+          <span>CTTT test token — not a production asset</span>
+        </div>
+      </div>
+      <div className="lv-notice">
+        <span className="tag tag-lv" style={{ marginRight: 8 }}>LOCAL_VERIFIED</span>
+        <span className="lv-notice-text">
+          Sender-authorized recipient reveal path is LOCAL_VERIFIED, but not live-tested in this submission.
+        </span>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 07. Evidence log panel
 // ---------------------------------------------------------------------------
 
 function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
@@ -577,38 +807,40 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
   }
 
   return (
-    <section style={{ marginBottom: 16, border: "1px solid #444", padding: 12 }}>
-      <h2>7. Evidence log</h2>
-      {log.length === 0 ? (
-        <div>No actions executed yet.</div>
-      ) : (
-        <table style={{ width: "100%", fontSize: "0.85em", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left" }}>
-              <th>Time</th>
-              <th>Action</th>
-              <th>Label</th>
-              <th>Result</th>
-              <th>Tx hash</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {log.map((entry) => (
-              <tr key={entry.id} style={{ borderTop: "1px solid #333" }}>
-                <td>{entry.timestamp}</td>
-                <td>{entry.action}</td>
-                <td>{entry.label}</td>
-                <td>{entry.result}</td>
-                <td>{entry.txHash ?? "—"}</td>
-                <td>
-                  <button onClick={() => copyRaw(entry)}>Copy JSON</button>
-                </td>
+    <section>
+      <div className="section-label">07 &nbsp;Evidence log</div>
+      <div className="panel">
+        {log.length === 0 ? (
+          <p className="info-note">No actions executed yet. Connect a wallet and run steps above to populate this log.</p>
+        ) : (
+          <table className="evidence-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Label</th>
+                <th>Result</th>
+                <th>Tx hash</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+            </thead>
+            <tbody>
+              {log.map((entry) => (
+                <tr key={entry.id}>
+                  <td>{entry.timestamp.slice(11, 19)}</td>
+                  <td>{entry.action}</td>
+                  <td><span className={labelClass(entry.label)}>{entry.label}</span></td>
+                  <td>{entry.result}</td>
+                  <td>{entry.txHash ? `${entry.txHash.slice(0, 10)}…` : "—"}</td>
+                  <td>
+                    <button className="btn btn-sm" onClick={() => copyRaw(entry)}>Copy</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </section>
   );
 }

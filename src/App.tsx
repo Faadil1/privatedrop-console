@@ -292,10 +292,15 @@ function WalletPanel(props: {
             ))}
           </div>
         ) : (
-          <div className="panel-row">
-            <span className="panel-key">Connected</span>
-            <span className="panel-value">{address ? maskAddress(address) : "—"}</span>
-          </div>
+          <>
+            <div className="panel-row">
+              <span className="panel-key">Signing wallet / sender</span>
+              <span className="panel-value">{address ? maskAddress(address) : "—"}</span>
+            </div>
+            <p className="info-note" style={{ marginTop: 8 }}>
+              The connected wallet signs the transaction. Recipients are entered separately below.
+            </p>
+          </>
         )}
         <div className="panel-row" style={{ marginTop: 8 }}>
           <span className="panel-key">Chain</span>
@@ -432,7 +437,7 @@ function RegistrationPanel({ address, logEvent }: { address: Address; logEvent: 
 
   return (
     <section>
-      <div className="section-label">03 &nbsp;Registration</div>
+      <div className="section-label">04 &nbsp;Readiness Gate - Registration</div>
       <div className="panel">
         <h2>
           isRegistered()
@@ -506,7 +511,7 @@ function FaucetPanel({ address, logEvent }: { address: Address; logEvent: LogFn 
 
   return (
     <section>
-      <div className="section-label">04 &nbsp;Mint CTTT</div>
+      <div className="section-label">04 &nbsp;Readiness Gate - Faucet / Balance</div>
       <div className="panel">
         <h2>Faucet / Balance</h2>
         <div className="panel-row">
@@ -524,9 +529,7 @@ function FaucetPanel({ address, logEvent }: { address: Address; logEvent: LogFn 
           </span>
         </div>
         <p className="info-note" style={{ margin: "10px 0" }}>
-          The confidential balance is an encrypted handle, not a plaintext number. Decrypting
-          it via Zama's userDecrypt is <span className="tag tag-not-used">NOT_USED</span> in this
-          build — out of scope. The handle read itself is a real call once executed.
+          Faucet mint is for the connected signing wallet so it can fund the confidential disperse test. Do not use this wallet as recipient automatically. The confidential balance is an encrypted handle, not a plaintext number. Decrypting it via Zama's userDecrypt is <span className="tag tag-not-used">NOT_USED</span> in this build.
         </p>
         <button className="btn btn-primary" onClick={handleMint} disabled={mintConfidential.isPending}>
           {mintConfidential.isPending ? "Minting…" : "Mint 1.0 CTTT — sends a real tx"}
@@ -568,8 +571,24 @@ function PreflightAndDispersePanels({
 }: PreflightAndDispersePanelsProps) {
   const [preflightEnabled, setPreflightEnabled] = useState(false);
 
+  const isValidAddress = (addr: string) => /^0x[a-fA-F0-9]{40}$/.test(addr.trim());
+
+  const hasInvalidRecipient = useMemo(() => {
+    const r1 = recipient1.trim();
+    const r2 = recipient2.trim();
+    if (r1.length > 0 && !isValidAddress(r1)) return true;
+    if (r2.length > 0 && !isValidAddress(r2)) return true;
+    return false;
+  }, [recipient1, recipient2]);
+
+  const hasNoRecipients = useMemo(() => {
+    return recipient1.trim().length === 0 && recipient2.trim().length === 0;
+  }, [recipient1, recipient2]);
+
+  const isInputInvalid = hasNoRecipients || hasInvalidRecipient;
+
   const recipients = useMemo(
-    () => [recipient1, recipient2].filter((r): r is string => r.trim().length > 0) as Address[],
+    () => [recipient1, recipient2].filter((r): r is string => r.trim().length > 0 && isValidAddress(r)) as Address[],
     [recipient1, recipient2],
   );
   const amounts = useMemo(() => {
@@ -583,7 +602,7 @@ function PreflightAndDispersePanels({
     });
   }, [amount1, amount2, recipients.length]);
 
-  const preflightArgsReady = preflightEnabled && recipients.length > 0 && !!CTTT_ADDRESS;
+  const preflightArgsReady = preflightEnabled && !isInputInvalid && !!CTTT_ADDRESS;
 
   const preflight = usePreflightDisperse({
     user: preflightArgsReady ? address : undefined,
@@ -597,7 +616,7 @@ function PreflightAndDispersePanels({
     if (preflight.data) {
       logEvent({
         action: "preflightDisperse()",
-        result: `ready=${preflight.data.ready}, blockers=[${preflight.data.blockers.join("; ")}]`,
+        result: `ready=${preflight.data.ready}, hasApprovedSingleton=${preflight.data.hasApprovedSingleton}`,
         label: "LIVE",
         raw: preflight.data,
       });
@@ -608,25 +627,6 @@ function PreflightAndDispersePanels({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preflight.data, preflight.error]);
 
-  // -----------------------------------------------------------------------
-  // 05b. Approval — token.setOperator(DISPERSE_SINGLETON, farFutureDeadline)
-  //
-  // Confirmed from installed @tokenops/sdk/fhe/operators.d.ts (NOT guessed):
-  // preflightDisperse's "direct" mode blocker
-  // ("Sender has not approved the singleton as operator on the token") is
-  // computed by reading ERC7984_IS_OPERATOR_ABI.isOperator(user, singleton)
-  // on the token (see @tokenops/sdk chunk-FXCW7LVB.js preflightDisperse
-  // implementation). The exact, documented write-side counterpart is
-  // `setOperator()` from `@tokenops/sdk/fhe`, calling the real ERC-7984
-  // selector `setOperator(address operator, uint48 until)` on the token.
-  //
-  // BUT: importing `@tokenops/sdk/fhe` directly fails the production build
-  // — its barrel has a top-level import of `SepoliaConfig`/`MainnetConfig`
-  // from `@zama-fhe/sdk`, which don't exist in the installed 3.2.0 (removed
-  // between 3.0.0 and 3.2.0, inside @tokenops/sdk's own declared ^3.0.0 peer
-  // range). See `src/erc7984-operator.ts` for the verbatim-copied
-  // workaround and full discovery notes (SPIKE-RESULT.md Section 12).
-  // -----------------------------------------------------------------------
   const approveOperator = useMutation({
     mutationFn: async () => {
       if (!CTTT_ADDRESS) throw new Error("CTTT address not resolved");
@@ -635,7 +635,6 @@ function PreflightAndDispersePanels({
         walletClient,
         token: CTTT_ADDRESS,
         spender: DISPERSE_SINGLETON,
-        // deadline omitted -> defaults to ERC7984_OPERATOR_MAX_DEADLINE
       });
     },
     onSuccess: (hash) => {
@@ -646,7 +645,6 @@ function PreflightAndDispersePanels({
         txHash: hash,
         raw: { hash, token: CTTT_ADDRESS, spender: DISPERSE_SINGLETON },
       });
-      // Re-run preflightDisperse() to confirm hasApprovedSingleton flips true.
       preflight.refetch();
     },
     onError: (err) => {
@@ -654,13 +652,6 @@ function PreflightAndDispersePanels({
     },
   });
 
-  // NOTE: @tokenops/sdk's doc comment says `encryptor: () => zamaSDK.relayer`
-  // directly. That does not type-check against the installed
-  // @zama-fhe/sdk@3.2.0 (hex-string EncryptResult vs. the Uint8Array-based
-  // Encryptor interface @tokenops/sdk expects) — see zama.ts
-  // `adaptZamaEncryptor` for the exact discovered mismatch and the
-  // standard hex->bytes bridge used here. UNVERIFIED at runtime — see
-  // SPIKE-RESULT.md Section 10.
   const zamaSDK = useZamaSDK();
   const disperse = useDisperse({ encryptor: () => adaptZamaEncryptor(zamaSDK) });
 
@@ -697,7 +688,7 @@ function PreflightAndDispersePanels({
             Preflight checks whether this recipient list can be sealed into a TokenOps Confidential Disperse transaction.
           </p>
           <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="btn" onClick={() => setPreflightEnabled(true)} disabled={recipients.length === 0}>
+            <button className="btn" onClick={() => setPreflightEnabled(true)} disabled={isInputInvalid}>
               Run preflightDisperse()
             </button>
             {preflight.data && (
@@ -706,6 +697,11 @@ function PreflightAndDispersePanels({
               </span>
             )}
           </div>
+          {isInputInvalid && (
+            <p className="warn-msg" style={{ marginTop: 8 }}>
+              Enter recipient addresses to continue.
+            </p>
+          )}
           {preflight.data && (
             <>
               <div className="panel-row" style={{ marginTop: 10 }}>
@@ -727,10 +723,10 @@ function PreflightAndDispersePanels({
         </div>
       </section>
 
-      {/* 05b. Approval */}
+      {/* 06. Approval */}
       {preflight.data && (
         <section>
-          <div className="section-label">05b &nbsp;Approve TokenOps singleton</div>
+          <div className="section-label">06 &nbsp;Approval</div>
           <div className="panel">
             <h2>
               setOperator()
@@ -770,9 +766,9 @@ function PreflightAndDispersePanels({
         </section>
       )}
 
-      {/* 06. Disperse */}
+      {/* 07. Execute disperse */}
       <section>
-        <div className="section-label">06 &nbsp;Execute disperse</div>
+        <div className="section-label">07 &nbsp;Execute disperse</div>
         <div className="panel">
           <h2>disperse() <span className="tag tag-live">LIVE TX</span></h2>
           <p className="info-note" style={{ marginBottom: 10 }}>
@@ -940,13 +936,20 @@ function ComposerPanel({
     setAmount2("1");
   }
 
+  function handleLoadDemo() {
+    setRecipient1("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+    setRecipient2("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+    setAmount1("1");
+    setAmount2("1");
+  }
+
   return (
     <section>
       <div className="section-label">03 &nbsp;Composer / Recipient List</div>
       <div className="panel">
         <h2>Composer / Recipient List</h2>
         <div style={{ marginBottom: 10, fontSize: "11px", color: "var(--ink-mid)" }}>
-          Demo recipients — editable
+          Enter the destination addresses for the confidential transfer.
         </div>
         <div className="input-row">
           <span className="input-label">Recipient 1</span>
@@ -996,7 +999,13 @@ function ComposerPanel({
           </div>
         </div>
 
-        <div style={{ marginTop: 10 }}>
+        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
+          <button className="btn btn-sm" onClick={handleLoadDemo}>
+            Load demo recipients
+          </button>
+          <span style={{ fontSize: "11px", color: "var(--ink-mid)" }}>
+            Demo recipients — editable
+          </span>
           <button className="btn btn-sm" onClick={handleClear}>
             Clear recipients
           </button>

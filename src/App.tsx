@@ -92,14 +92,16 @@ function labelClass(label: EvidenceLabel): string {
 // ---------------------------------------------------------------------------
 
 const STEPS = [
-  { num: 1, label: "Connect" },
-  { num: 2, label: "Register" },
-  { num: 3, label: "Mint" },
-  { num: 4, label: "Approve" },
+  { num: 1, label: "Env" },
+  { num: 2, label: "Connect" },
+  { num: 3, label: "Compose" },
+  { num: 4, label: "Readiness" },
   { num: 5, label: "Preflight" },
-  { num: 6, label: "Disperse" },
-  { num: 7, label: "Reveal" },
-  { num: 8, label: "Evidence" },
+  { num: 6, label: "Approve" },
+  { num: 7, label: "Disperse" },
+  { num: 8, label: "Receipt" },
+  { num: 9, label: "Reveal" },
+  { num: 10, label: "Evidence" },
 ];
 
 function StepNav({ currentStep }: { currentStep: number }) {
@@ -149,13 +151,14 @@ export function App() {
 
   // Determine current step for the step indicator based on log events
   const currentStep = useMemo(() => {
-    if (!isConnected || !onSepolia) return 1;
+    if (!isConnected || !onSepolia) return 2;
     const actions = new Set(log.map(e => e.action));
-    if (actions.has("disperse()")) return 8;
-    if (actions.has("preflightDisperse()")) return 6;
-    if (actions.has("setOperator()")) return 5;
-    if (actions.has("mintConfidential()")) return 4;
-    return 2;
+    if (actions.has("disperse()")) return 8; // receipt
+    if (actions.has("preflightDisperse()")) return 7; // disperse execution
+    if (actions.has("setOperator()")) return 6; // disperse or approve
+    if (actions.has("mintConfidential()")) return 4; // readiness
+    if (actions.has("isRegistered()")) return 4; // readiness
+    return 3; // compose
   }, [isConnected, onSepolia, log]);
 
   return (
@@ -207,14 +210,14 @@ export function App() {
         />
       )}
 
-      {/* 07 — Recipient Reveal Path */}
+      {/* 09 — Recipient Reveal Path */}
       <RecipientRevealPanel />
 
-      {/* Scope boundary / limitations */}
-      <BoundaryPanel />
-
-      {/* 08 — Evidence log */}
+      {/* 10 — Evidence log */}
       <EvidenceLogPanel log={log} />
+
+      {/* 11 — Scope boundary / limitations */}
+      <BoundaryPanel />
 
       <p className="memory-line">The amount stayed sealed. The proof didn't.</p>
     </>
@@ -332,15 +335,48 @@ function RunnerPanels({
     [publicClient, walletClient],
   );
 
+  const [recipient1, setRecipient1] = useState("");
+  const [recipient2, setRecipient2] = useState("");
+  const [amount1, setAmount1] = useState("1");
+  const [amount2, setAmount2] = useState("1");
+  const [disperseTxHash, setDisperseTxHash] = useState<string | null>(null);
+
   return (
     <ZamaProvider config={zamaConfig}>
+      {/* 03. Composer / Recipient List */}
+      <ComposerPanel
+        recipient1={recipient1}
+        setRecipient1={setRecipient1}
+        recipient2={recipient2}
+        setRecipient2={setRecipient2}
+        amount1={amount1}
+        setAmount1={setAmount1}
+        amount2={amount2}
+        setAmount2={setAmount2}
+      />
+
+      {/* 04. Readiness Gate */}
       <RegistrationPanel address={address} logEvent={logEvent} />
       <FaucetPanel address={address} logEvent={logEvent} />
+
+      {/* 05, 06. Preflight + Disperse */}
       <PreflightAndDispersePanels
         address={address}
         publicClient={publicClient}
         walletClient={walletClient}
         logEvent={logEvent}
+        recipient1={recipient1}
+        recipient2={recipient2}
+        amount1={amount1}
+        amount2={amount2}
+        setDisperseTxHash={setDisperseTxHash}
+      />
+
+      {/* 08. Sealed Receipt */}
+      <SealedReceiptPanel
+        txHash={disperseTxHash}
+        recipient1={recipient1}
+        recipient2={recipient2}
       />
     </ZamaProvider>
   );
@@ -507,25 +543,30 @@ function FaucetPanel({ address, logEvent }: { address: Address; logEvent: LogFn 
 // 05 & 06. Preflight + Disperse panels
 // ---------------------------------------------------------------------------
 
+interface PreflightAndDispersePanelsProps {
+  address: Address;
+  publicClient: NonNullable<UsePublicClientReturnType>;
+  walletClient: NonNullable<UseWalletClientReturnType["data"]>;
+  logEvent: LogFn;
+  recipient1: string;
+  recipient2: string;
+  amount1: string;
+  amount2: string;
+  setDisperseTxHash: (hash: string | null) => void;
+}
+
 function PreflightAndDispersePanels({
   address,
   publicClient,
   walletClient,
   logEvent,
-}: {
-  address: Address;
-  publicClient: NonNullable<UsePublicClientReturnType>;
-  walletClient: NonNullable<UseWalletClientReturnType["data"]>;
-  logEvent: LogFn;
-}) {
-  const [recipient1, setRecipient1] = useState("");
-  const [recipient2, setRecipient2] = useState("");
-  const [amount1, setAmount1] = useState("1");
-  const [amount2, setAmount2] = useState("1");
+  recipient1,
+  recipient2,
+  amount1,
+  amount2,
+  setDisperseTxHash,
+}: PreflightAndDispersePanelsProps) {
   const [preflightEnabled, setPreflightEnabled] = useState(false);
-  const [focus1, setFocus1] = useState(false);
-  const [focus2, setFocus2] = useState(false);
-  const [hideFullAddresses, setHideFullAddresses] = useState(true);
 
   const recipients = useMemo(
     () => [recipient1, recipient2].filter((r): r is string => r.trim().length > 0) as Address[],
@@ -636,6 +677,7 @@ function PreflightAndDispersePanels({
             txHash: result.hash,
             raw: result,
           });
+          setDisperseTxHash(result.hash);
         },
         onError: (err) => {
           logEvent({ action: "disperse()", result: err.message, label: "BLOCKED" });
@@ -646,77 +688,14 @@ function PreflightAndDispersePanels({
 
   return (
     <>
-      {/* 05. Preflight */}
+      {/* 05. Seal / Preflight */}
       <section>
-        <div className="section-label">05 &nbsp;Preflight (direct mode, 1–2 recipients)</div>
+        <div className="section-label">05 &nbsp;Seal / Preflight</div>
         <div className="panel">
-          <div className="input-row">
-            <span className="input-label">Recipient 1</span>
-            <input
-              className="field-input"
-              value={focus1 || !hideFullAddresses ? recipient1 : maskAddress(recipient1)}
-              onFocus={() => setFocus1(true)}
-              onBlur={() => setFocus1(false)}
-              onChange={(e) => setRecipient1(e.target.value)}
-              placeholder="0x…"
-              size={44}
-            />
-            <span className="input-label">Amount (raw uint64)</span>
-            <input
-              className="field-input"
-              value={amount1}
-              onChange={(e) => setAmount1(e.target.value)}
-              size={8}
-            />
-          </div>
-          <div className="input-row">
-            <span className="input-label">Recipient 2</span>
-            <input
-              className="field-input"
-              value={focus2 || !hideFullAddresses ? recipient2 : maskAddress(recipient2)}
-              onFocus={() => setFocus2(true)}
-              onBlur={() => setFocus2(false)}
-              onChange={(e) => setRecipient2(e.target.value)}
-              placeholder="0x… (optional)"
-              size={44}
-            />
-            <span className="input-label">Amount</span>
-            <input
-              className="field-input"
-              value={amount2}
-              onChange={(e) => setAmount2(e.target.value)}
-              size={8}
-            />
-          </div>
-          
-          {/* Masking controls and previews */}
-          <div style={{ marginTop: 12, padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-              <input
-                type="checkbox"
-                id="toggle-masking"
-                checked={hideFullAddresses}
-                onChange={(e) => setHideFullAddresses(e.target.checked)}
-                style={{ cursor: "pointer" }}
-              />
-              <label htmlFor="toggle-masking" style={{ fontSize: "11px", cursor: "pointer", color: "var(--ink-mid)" }}>
-                Hide full addresses in input fields (display mask only)
-              </label>
-            </div>
-            
-            <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
-              <strong>Recipients preview (display only):</strong>
-              <div style={{ fontFamily: "monospace", marginTop: 4 }}>
-                <div>Recipient 1: {maskAddress(recipient1)}</div>
-                <div>Recipient 2: {maskAddress(recipient2)}</div>
-              </div>
-              <div style={{ marginTop: 6, fontStyle: "italic", fontSize: "10px" }}>
-                “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
-              </div>
-            </div>
-          </div>
-
-          <p className="info-note">Mode: direct (fixed for this execution)</p>
+          <h2>Seal / Preflight</h2>
+          <p className="info-note" style={{ marginBottom: 12 }}>
+            Preflight checks whether this recipient list can be sealed into a TokenOps Confidential Disperse transaction.
+          </p>
           <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn" onClick={() => setPreflightEnabled(true)} disabled={recipients.length === 0}>
               Run preflightDisperse()
@@ -856,13 +835,13 @@ function BoundaryPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// 07. Recipient Reveal Path panel
+// 09. Recipient Reveal Path panel
 // ---------------------------------------------------------------------------
 
 function RecipientRevealPanel() {
   return (
     <section>
-      <div className="section-label">07 &nbsp;Recipient Reveal Path</div>
+      <div className="section-label">09 &nbsp;Recipient Reveal Path</div>
       <div className="panel">
         <h2>Recipient Reveal Path <span className="tag tag-lv">LOCAL_VERIFIED</span></h2>
         <div className="panel-row">
@@ -882,7 +861,7 @@ function RecipientRevealPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// 08. Evidence log panel
+// 10. Evidence log panel
 // ---------------------------------------------------------------------------
 
 function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
@@ -892,7 +871,7 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
 
   return (
     <section>
-      <div className="section-label">08 &nbsp;Evidence log</div>
+      <div className="section-label">10 &nbsp;Evidence log</div>
       <div className="panel">
         {log.length === 0 ? (
           <p className="info-note">No actions executed yet. Connect a wallet and run steps above to populate this log.</p>
@@ -924,6 +903,156 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
             </tbody>
           </table>
         )}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Composer / Recipient List panel
+// ---------------------------------------------------------------------------
+
+interface ComposerPanelProps {
+  recipient1: string;
+  setRecipient1: (val: string) => void;
+  recipient2: string;
+  setRecipient2: (val: string) => void;
+  amount1: string;
+  setAmount1: (val: string) => void;
+  amount2: string;
+  setAmount2: (val: string) => void;
+}
+
+function ComposerPanel({
+  recipient1,
+  setRecipient1,
+  recipient2,
+  setRecipient2,
+  amount1,
+  setAmount1,
+  amount2,
+  setAmount2,
+}: ComposerPanelProps) {
+  function handleClear() {
+    setRecipient1("");
+    setRecipient2("");
+    setAmount1("1");
+    setAmount2("1");
+  }
+
+  return (
+    <section>
+      <div className="section-label">03 &nbsp;Composer / Recipient List</div>
+      <div className="panel">
+        <h2>Composer / Recipient List</h2>
+        <div style={{ marginBottom: 10, fontSize: "11px", color: "var(--ink-mid)" }}>
+          Demo recipients — editable
+        </div>
+        <div className="input-row">
+          <span className="input-label">Recipient 1</span>
+          <input
+            className="field-input"
+            value={recipient1}
+            onChange={(e) => setRecipient1(e.target.value)}
+            placeholder="0x…"
+            size={44}
+          />
+          <span className="input-label">Amount (raw uint64)</span>
+          <input
+            className="field-input"
+            value={amount1}
+            onChange={(e) => setAmount1(e.target.value)}
+            size={8}
+          />
+        </div>
+        <div className="input-row">
+          <span className="input-label">Recipient 2</span>
+          <input
+            className="field-input"
+            value={recipient2}
+            onChange={(e) => setRecipient2(e.target.value)}
+            placeholder="0x… (optional)"
+            size={44}
+          />
+          <span className="input-label">Amount</span>
+          <input
+            className="field-input"
+            value={amount2}
+            onChange={(e) => setAmount2(e.target.value)}
+            size={8}
+          />
+        </div>
+
+        <div style={{ marginTop: 12, padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
+          <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
+            <strong>Recipients preview (display only):</strong>
+            <div style={{ fontFamily: "monospace", marginTop: 4 }}>
+              <div>Recipient 1: {maskAddress(recipient1)}</div>
+              <div>Recipient 2: {maskAddress(recipient2)}</div>
+            </div>
+            <div style={{ marginTop: 6, fontStyle: "italic", fontSize: "10px" }}>
+              “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
+            </div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <button className="btn btn-sm" onClick={handleClear}>
+            Clear recipients
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sealed Receipt panel
+// ---------------------------------------------------------------------------
+
+function SealedReceiptPanel({
+  txHash,
+  recipient1,
+  recipient2,
+}: {
+  txHash: string | null;
+  recipient1: string;
+  recipient2: string;
+}) {
+  if (!txHash) {
+    return (
+      <section>
+        <div className="section-label">08 &nbsp;Sealed Receipt</div>
+        <div className="panel">
+          <h2>Sealed Receipt</h2>
+          <p className="info-note">
+            Sealed receipt will populate after a successful disperse transaction.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <div className="section-label">08 &nbsp;Sealed Receipt</div>
+      <div className="panel">
+        <h2>Sealed Receipt <span className="tag tag-live">LIVE</span></h2>
+        <div className="panel-row">
+          <span className="panel-key">Disperse tx</span>
+          <span className="panel-value">{txHash}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Recipient A (masked)</span>
+          <span className="panel-value">{maskAddress(recipient1)}</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Recipient B (masked)</span>
+          <span className="panel-value">{maskAddress(recipient2)}</span>
+        </div>
+        <p className="info-note" style={{ marginTop: 8, fontStyle: "italic" }}>
+          “No plaintext amount is shown after sealing.”
+        </p>
       </div>
     </section>
   );

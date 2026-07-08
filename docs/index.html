@@ -233,6 +233,126 @@ details.raw[open] summary::after { content: "▾"; }
   .handle-block:last-child { border-bottom: none; }
   .gate { grid-template-columns: 1fr 1fr; }
 }
+
+/* Drawer Styling */
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 480px;
+  height: 100vh;
+  background: var(--paper);
+  border-left: 2px solid var(--ink);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.15);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+.drawer-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--rule);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 11px 11px;
+}
+
+.drawer-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.drawer-subtitle {
+  font-size: 11px;
+  color: var(--ink-mid);
+  margin-top: 4px;
+}
+
+.drawer-close {
+  background: transparent;
+  border: 1px solid var(--ink);
+  color: var(--ink);
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.drawer-close:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.drawer-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--paper);
+}
+
+.drawer-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+}
+
+.drawer-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+  font-size: 11px;
+}
+
+.drawer-footer-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.drawer-warning {
+  color: var(--amber-fg);
+  font-size: 10px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+.drawer-link {
+  color: var(--ink);
+  text-decoration: underline;
+  font-weight: 500;
+}
+
+.drawer-link:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 600px) {
+  .drawer {
+    width: 100% !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -245,9 +365,9 @@ details.raw[open] summary::after { content: "▾"; }
   <p>Built on TokenOps Confidential Disperse. Every proof view is grounded in a live Sepolia transaction — no simulated payout data.</p>
   <div style="display:flex; gap:10px; flex-wrap:wrap;">
 
-  <a href="./runner/" class="cta-primary" role="button">Start sealed drop →</a>
+  <a href="./runner/" class="cta-primary trigger-drawer" role="button">Start sealed drop →</a>
 
-  <a href="./runner/" class="cta-primary" role="button" style="background:transparent;color:var(--ink);">
+  <a href="./runner/" class="cta-primary trigger-drawer" role="button" style="background:transparent;color:var(--ink);">
 
     Run transaction →
 
@@ -594,6 +714,62 @@ window.deriveTracePoints = function(hex, opts) {
   var si = vals.indexOf(Math.max.apply(null,vals));
   return { points: pts, spikeIndex: si, spikePoint: pts[si] };
 };
+
+// Drawer Interaction Logic
+document.querySelectorAll('.trigger-drawer').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.getElementById('drawer').classList.add('open');
+  });
+});
+
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+}
+
+document.getElementById('drawer-close-btn').addEventListener('click', closeDrawer);
+
+// Escape key to close
+window.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeDrawer();
+  }
+});
+
+// Click outside to close
+document.addEventListener('click', function(e) {
+  var drawer = document.getElementById('drawer');
+  if (drawer.classList.contains('open')) {
+    var isClickInsideDrawer = drawer.contains(e.target);
+    var isTriggerBtn = e.target.closest('.trigger-drawer');
+    if (!isClickInsideDrawer && !isTriggerBtn) {
+      closeDrawer();
+    }
+  }
+});
 </script>
+
+<!-- Execution Drawer -->
+<div id="drawer" class="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title-row">
+      <span class="drawer-title">Sepolia Execution Console</span>
+      <button class="drawer-close" id="drawer-close-btn" aria-label="Close drawer">Close</button>
+    </div>
+    <div class="drawer-subtitle">TokenOps Confidential Disperse runner</div>
+  </div>
+  <div class="drawer-body">
+    <iframe class="drawer-iframe" src="./runner/" title="Sepolia Execution Console"></iframe>
+  </div>
+  <div class="drawer-footer">
+    <div class="drawer-footer-links">
+      <a href="./runner/" class="drawer-link" target="_blank">Open full runner ↗</a>
+    </div>
+    <div class="drawer-warning">
+      If wallet connection fails in the embedded console, open the full runner. Wallet extensions may behave differently inside iframes.
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

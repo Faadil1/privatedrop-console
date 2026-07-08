@@ -87,7 +87,8 @@ const STEPS = [
   { num: 4, label: "Approve" },
   { num: 5, label: "Preflight" },
   { num: 6, label: "Disperse" },
-  { num: 7, label: "Evidence" },
+  { num: 7, label: "Reveal" },
+  { num: 8, label: "Evidence" },
 ];
 
 function StepNav({ currentStep }: { currentStep: number }) {
@@ -135,8 +136,16 @@ export function App() {
   const onSepolia = chainId === SEPOLIA_CHAIN_ID;
   const runnerReady = isConnected && onSepolia && !!publicClient && !!walletClient && !!address;
 
-  // Determine current step for the step indicator
-  const currentStep = !isConnected ? 1 : !onSepolia ? 1 : 2;
+  // Determine current step for the step indicator based on log events
+  const currentStep = useMemo(() => {
+    if (!isConnected || !onSepolia) return 1;
+    const actions = new Set(log.map(e => e.action));
+    if (actions.has("disperse()")) return 8;
+    if (actions.has("preflightDisperse()")) return 6;
+    if (actions.has("setOperator()")) return 5;
+    if (actions.has("mintConfidential()")) return 4;
+    return 2;
+  }, [isConnected, onSepolia, log]);
 
   return (
     <>
@@ -154,7 +163,7 @@ export function App() {
         </a>
       </header>
 
-      <StepNav currentStep={runnerReady ? 3 : currentStep} />
+      <StepNav currentStep={currentStep} />
 
       {/* 01 — Environment */}
       <EnvironmentPanel chainId={chainId} address={address} />
@@ -187,10 +196,13 @@ export function App() {
         />
       )}
 
+      {/* 07 — Recipient Reveal Path */}
+      <RecipientRevealPanel />
+
       {/* Scope boundary / limitations */}
       <BoundaryPanel />
 
-      {/* Evidence log */}
+      {/* 08 — Evidence log */}
       <EvidenceLogPanel log={log} />
 
       <p className="memory-line">The amount stayed sealed. The proof didn't.</p>
@@ -798,7 +810,33 @@ function BoundaryPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// 07. Evidence log panel
+// 07. Recipient Reveal Path panel
+// ---------------------------------------------------------------------------
+
+function RecipientRevealPanel() {
+  return (
+    <section>
+      <div className="section-label">07 &nbsp;Recipient Reveal Path</div>
+      <div className="panel">
+        <h2>Recipient Reveal Path <span className="tag tag-lv">LOCAL_VERIFIED</span></h2>
+        <div className="panel-row">
+          <span className="panel-key">Reveal Verification Mode</span>
+          <span className="panel-value">LOCAL_VERIFIED (simulation only)</span>
+        </div>
+        <div className="panel-row">
+          <span className="panel-key">Onchain Decryption status</span>
+          <span className="panel-value" style={{ color: "var(--amber-fg)" }}>recipientDecrypt() not implemented</span>
+        </div>
+        <p className="info-note" style={{ marginTop: 8 }}>
+          Under the honest limitations framework, the recipient reveal path is validated via local deterministic signatures. It is not live-tested on Sepolia in this build.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 08. Evidence log panel
 // ---------------------------------------------------------------------------
 
 function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
@@ -808,7 +846,7 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
 
   return (
     <section>
-      <div className="section-label">07 &nbsp;Evidence log</div>
+      <div className="section-label">08 &nbsp;Evidence log</div>
       <div className="panel">
         {log.length === 0 ? (
           <p className="info-note">No actions executed yet. Connect a wallet and run steps above to populate this log.</p>

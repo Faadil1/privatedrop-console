@@ -69,13 +69,42 @@ function bigintReplacer(_key: string, value: unknown) {
 
 function maskAddress(addr: string): string {
   if (!addr) return "—";
-  if (addr.length <= 10) return addr;
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  if (/^0x[a-fA-F0-9]{40}$/.test(addr)) {
+    return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+  }
+  return addr;
 }
 
 function maskHexAddresses(text: string): string {
   if (!text) return "";
-  return text.replace(/0x[a-fA-F0-9]{40}/gi, (match) => maskAddress(match));
+  const boundarySafeRegex = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/gi;
+  return text.replace(boundarySafeRegex, (match) => maskAddress(match));
+}
+
+function sanitizeForDisplay(value: any): any {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (/^0x[a-fA-F0-9]{40}$/.test(value)) {
+      return maskAddress(value);
+    }
+    const boundarySafeRegex = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/gi;
+    return value.replace(boundarySafeRegex, (match) => maskAddress(match));
+  }
+  if (Array.isArray(value)) {
+    return value.map(sanitizeForDisplay);
+  }
+  if (typeof value === "object") {
+    if (Object.prototype.toString.call(value) === "[object Object]") {
+      const sanitized: Record<string, any> = {};
+      for (const key of Object.keys(value)) {
+        sanitized[key] = sanitizeForDisplay(value[key]);
+      }
+      return sanitized;
+    }
+  }
+  return value;
 }
 
 function labelClass(label: EvidenceLabel): string {
@@ -345,6 +374,7 @@ function RunnerPanels({
   const [amount1, setAmount1] = useState("1");
   const [amount2, setAmount2] = useState("1");
   const [disperseTxHash, setDisperseTxHash] = useState<string | null>(null);
+  const [isEditingRecipients, setIsEditingRecipients] = useState(false);
 
   return (
     <ZamaProvider config={zamaConfig}>
@@ -358,6 +388,8 @@ function RunnerPanels({
         setAmount1={setAmount1}
         amount2={amount2}
         setAmount2={setAmount2}
+        isEditingRecipients={isEditingRecipients}
+        setIsEditingRecipients={setIsEditingRecipients}
       />
 
       {/* 04. Readiness Gate */}
@@ -714,8 +746,11 @@ function PreflightAndDispersePanels({
                   {preflight.data.blockers.length ? preflight.data.blockers.join("; ") : "none"}
                 </span>
               </div>
+              <div style={{ marginTop: 8, fontSize: "10px", color: "var(--ink-faint)" }}>
+                Display-sanitized JSON — addresses masked; transaction values unchanged.
+              </div>
               <div className="raw-output">
-                {JSON.stringify(preflight.data, bigintReplacer, 2)}
+                {JSON.stringify(sanitizeForDisplay(preflight.data), bigintReplacer, 2)}
               </div>
             </>
           )}
@@ -782,9 +817,14 @@ function PreflightAndDispersePanels({
             {disperse.isPending ? "Sending disperse() tx…" : "Execute disperse() — sends a real tx"}
           </button>
           {disperse.data && (
-            <div className="raw-output">
-              {JSON.stringify(disperse.data, bigintReplacer, 2)}
-            </div>
+            <>
+              <div style={{ marginTop: 10, fontSize: "10px", color: "var(--ink-faint)" }}>
+                Display-sanitized JSON — addresses masked; transaction values unchanged.
+              </div>
+              <div className="raw-output">
+                {JSON.stringify(sanitizeForDisplay(disperse.data), bigintReplacer, 2)}
+              </div>
+            </>
           )}
           {disperse.isError && <div className="error-msg">{disperse.error?.message}</div>}
         </div>
@@ -862,7 +902,7 @@ function RecipientRevealPanel() {
 
 function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
   function copyRaw(entry: EvidenceEntry) {
-    void navigator.clipboard?.writeText(JSON.stringify(entry, bigintReplacer, 2));
+    void navigator.clipboard?.writeText(JSON.stringify(sanitizeForDisplay(entry), bigintReplacer, 2));
   }
 
   return (
@@ -906,8 +946,6 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
 
 // ---------------------------------------------------------------------------
 // Composer / Recipient List panel
-// ---------------------------------------------------------------------------
-
 interface ComposerPanelProps {
   recipient1: string;
   setRecipient1: (val: string) => void;
@@ -917,6 +955,8 @@ interface ComposerPanelProps {
   setAmount1: (val: string) => void;
   amount2: string;
   setAmount2: (val: string) => void;
+  isEditingRecipients: boolean;
+  setIsEditingRecipients: (val: boolean) => void;
 }
 
 function ComposerPanel({
@@ -928,12 +968,15 @@ function ComposerPanel({
   setAmount1,
   amount2,
   setAmount2,
+  isEditingRecipients,
+  setIsEditingRecipients,
 }: ComposerPanelProps) {
   function handleClear() {
     setRecipient1("");
     setRecipient2("");
     setAmount1("1");
     setAmount2("1");
+    setIsEditingRecipients(false);
   }
 
   function handleLoadDemo() {
@@ -941,75 +984,134 @@ function ComposerPanel({
     setRecipient2("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
     setAmount1("1");
     setAmount2("1");
+    setIsEditingRecipients(false);
   }
+
+  const hasRecipients = !!recipient1 || !!recipient2;
+  const showMaskedPreview = !isEditingRecipients && hasRecipients;
 
   return (
     <section>
       <div className="section-label">03 &nbsp;Composer / Recipient List</div>
       <div className="panel">
         <h2>Composer / Recipient List</h2>
-        <div style={{ marginBottom: 10, fontSize: "11px", color: "var(--ink-mid)" }}>
-          Enter the destination addresses for the confidential transfer.
-        </div>
-        <div className="input-row">
-          <span className="input-label">Recipient 1</span>
-          <input
-            className="field-input"
-            value={recipient1}
-            onChange={(e) => setRecipient1(e.target.value)}
-            placeholder="0x…"
-            size={44}
-          />
-          <span className="input-label">Amount (raw uint64)</span>
-          <input
-            className="field-input"
-            value={amount1}
-            onChange={(e) => setAmount1(e.target.value)}
-            size={8}
-          />
-        </div>
-        <div className="input-row">
-          <span className="input-label">Recipient 2</span>
-          <input
-            className="field-input"
-            value={recipient2}
-            onChange={(e) => setRecipient2(e.target.value)}
-            placeholder="0x… (optional)"
-            size={44}
-          />
-          <span className="input-label">Amount</span>
-          <input
-            className="field-input"
-            value={amount2}
-            onChange={(e) => setAmount2(e.target.value)}
-            size={8}
-          />
-        </div>
-
-        <div style={{ marginTop: 12, padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
-          <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
-            <strong>Recipients preview (display only):</strong>
-            <div style={{ fontFamily: "monospace", marginTop: 4 }}>
-              <div>Recipient 1: {maskAddress(recipient1)}</div>
-              <div>Recipient 2: {maskAddress(recipient2)}</div>
+        
+        {showMaskedPreview ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ marginBottom: 4, fontSize: "11px", color: "var(--ink-mid)" }}>
+              Sealed Drop Composer (Masked preview active)
             </div>
-            <div style={{ marginTop: 6, fontStyle: "italic", fontSize: "10px" }}>
-              “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
+            
+            <div className="input-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="input-label">Recipient 1</span>
+              <span className="field-input" style={{ flex: 1, padding: "6px 10px", background: "var(--paper-dark)", border: "1px solid var(--rule)", color: "var(--ink-mid)", fontFamily: "monospace", borderRadius: "2px" }}>
+                {maskAddress(recipient1)}
+              </span>
+              <span className="input-label">Amount</span>
+              <span className="field-input" style={{ width: "80px", padding: "6px 10px", background: "var(--paper-dark)", border: "1px solid var(--rule)", color: "var(--ink-mid)", fontFamily: "monospace", borderRadius: "2px" }}>
+                {amount1}
+              </span>
+            </div>
+
+            <div className="input-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="input-label">Recipient 2</span>
+              <span className="field-input" style={{ flex: 1, padding: "6px 10px", background: "var(--paper-dark)", border: "1px solid var(--rule)", color: "var(--ink-mid)", fontFamily: "monospace", borderRadius: "2px" }}>
+                {recipient2 ? maskAddress(recipient2) : "—"}
+              </span>
+              <span className="input-label">Amount</span>
+              <span className="field-input" style={{ width: "80px", padding: "6px 10px", background: "var(--paper-dark)", border: "1px solid var(--rule)", color: "var(--ink-mid)", fontFamily: "monospace", borderRadius: "2px" }}>
+                {amount2}
+              </span>
+            </div>
+
+            <div style={{ padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
+              <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
+                <strong>Note:</strong> “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
+              </div>
+            </div>
+
+            <div style={{ marginTop: 6, display: "flex", gap: 10, alignItems: "center" }}>
+              <button className="btn btn-sm" onClick={() => setIsEditingRecipients(true)}>
+                Edit raw recipient addresses
+              </button>
+              <button className="btn btn-sm" onClick={handleClear}>
+                Clear recipients
+              </button>
             </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ marginBottom: 4, fontSize: "11px", color: "var(--ink-mid)" }}>
+              Enter the destination addresses for the confidential transfer.
+            </div>
 
-        <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10 }}>
-          <button className="btn btn-sm" onClick={handleLoadDemo}>
-            Load demo recipients
-          </button>
-          <span style={{ fontSize: "11px", color: "var(--ink-mid)" }}>
-            Demo recipients — editable
-          </span>
-          <button className="btn btn-sm" onClick={handleClear}>
-            Clear recipients
-          </button>
-        </div>
+            <div className="input-row">
+              <span className="input-label">Recipient 1</span>
+              <input
+                className="field-input"
+                value={recipient1}
+                onChange={(e) => setRecipient1(e.target.value)}
+                placeholder="0x…"
+                size={44}
+              />
+              <span className="input-label">Amount (raw uint64)</span>
+              <input
+                className="field-input"
+                value={amount1}
+                onChange={(e) => setAmount1(e.target.value)}
+                size={8}
+              />
+            </div>
+
+            <div className="input-row">
+              <span className="input-label">Recipient 2</span>
+              <input
+                className="field-input"
+                value={recipient2}
+                onChange={(e) => setRecipient2(e.target.value)}
+                placeholder="0x… (optional)"
+                size={44}
+              />
+              <span className="input-label">Amount</span>
+              <input
+                className="field-input"
+                value={amount2}
+                onChange={(e) => setAmount2(e.target.value)}
+                size={8}
+              />
+            </div>
+
+            <div style={{ padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
+              <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
+                <strong>Recipients preview (display only):</strong>
+                <div style={{ fontFamily: "monospace", marginTop: 4 }}>
+                  <div>Recipient 1: {maskAddress(recipient1)}</div>
+                  <div>Recipient 2: {maskAddress(recipient2)}</div>
+                </div>
+                <div style={{ marginTop: 6, fontStyle: "italic", fontSize: "10px" }}>
+                  “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 10 }}>
+              {hasRecipients && (
+                <button className="btn btn-sm btn-primary" onClick={() => setIsEditingRecipients(false)}>
+                  Done / Hide raw addresses
+                </button>
+              )}
+              <button className="btn btn-sm" onClick={handleLoadDemo}>
+                Load demo recipients
+              </button>
+              <span style={{ fontSize: "11px", color: "var(--ink-mid)" }}>
+                Demo recipients — editable
+              </span>
+              <button className="btn btn-sm" onClick={handleClear}>
+                Clear recipients
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

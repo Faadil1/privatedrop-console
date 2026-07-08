@@ -60,7 +60,7 @@ body {
   border: 1px solid var(--ink); border-radius: 2px;
   padding: 10px 18px; font-size: 11px; font-weight: 500;
   letter-spacing: 0.08em; text-transform: uppercase;
-  cursor: pointer; font-family: inherit;
+  cursor: pointer; font-family: inherit; text-decoration: none; display: inline-block; text-decoration: none; display: inline-block;
 }
 .cta-primary:hover { opacity: 0.85; }
 
@@ -243,7 +243,23 @@ details.raw[open] summary::after { content: "▾"; }
   <span class="eyebrow">Built on TokenOps Confidential Disperse &nbsp;/&nbsp; Sepolia instrument log</span>
   <h1>Distribute tokens. Prove it happened. Hide what was paid.</h1>
   <p>Built on TokenOps Confidential Disperse. Every proof view is grounded in a live Sepolia transaction — no simulated payout data.</p>
-  <button class="cta-primary">Start sealed drop →</button>
+  <div style="display:flex; gap:10px; flex-wrap:wrap;">
+
+  <a href="./runner/" class="cta-primary" role="button">Start sealed drop →</a>
+
+  <a href="https://5173-cs-932279704588-default.cs-us-east1-yeah.cloudshell.dev/?authuser=0" class="cta-primary" target="_blank" rel="noopener" role="button" style="background:transparent;color:var(--ink);">
+
+    Open transaction runner →
+
+  </a>
+
+</div>
+
+<p class="faint" style="font-size:11px;margin-top:8px;">
+
+  The proof UI is judge-facing. The transaction runner opens the live Sepolia execution console.
+
+</p>
 </header>
 
 <!-- JUDGE MODE NAV -->

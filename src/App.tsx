@@ -67,6 +67,17 @@ function bigintReplacer(_key: string, value: unknown) {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
+function maskAddress(addr: string): string {
+  if (!addr) return "—";
+  if (addr.length <= 10) return addr;
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+}
+
+function maskHexAddresses(text: string): string {
+  if (!text) return "";
+  return text.replace(/0x[a-fA-F0-9]{40}/gi, (match) => maskAddress(match));
+}
+
 function labelClass(label: EvidenceLabel): string {
   switch (label) {
     case "LIVE": return "tag tag-live";
@@ -227,7 +238,7 @@ function EnvironmentPanel({ chainId, address }: { chainId?: number; address?: Ad
         </div>
         <div className="panel-row">
           <span className="panel-key">Connected wallet</span>
-          <span className="panel-value">{address ?? "not connected"}</span>
+          <span className="panel-value">{address ? maskAddress(address) : "not connected"}</span>
         </div>
         <div className="panel-row">
           <span className="panel-key">Expected chain</span>
@@ -280,7 +291,7 @@ function WalletPanel(props: {
         ) : (
           <div className="panel-row">
             <span className="panel-key">Connected</span>
-            <span className="panel-value">{address}</span>
+            <span className="panel-value">{address ? maskAddress(address) : "—"}</span>
           </div>
         )}
         <div className="panel-row" style={{ marginTop: 8 }}>
@@ -512,6 +523,9 @@ function PreflightAndDispersePanels({
   const [amount1, setAmount1] = useState("1");
   const [amount2, setAmount2] = useState("1");
   const [preflightEnabled, setPreflightEnabled] = useState(false);
+  const [focus1, setFocus1] = useState(false);
+  const [focus2, setFocus2] = useState(false);
+  const [hideFullAddresses, setHideFullAddresses] = useState(true);
 
   const recipients = useMemo(
     () => [recipient1, recipient2].filter((r): r is string => r.trim().length > 0) as Address[],
@@ -640,7 +654,9 @@ function PreflightAndDispersePanels({
             <span className="input-label">Recipient 1</span>
             <input
               className="field-input"
-              value={recipient1}
+              value={focus1 || !hideFullAddresses ? recipient1 : maskAddress(recipient1)}
+              onFocus={() => setFocus1(true)}
+              onBlur={() => setFocus1(false)}
               onChange={(e) => setRecipient1(e.target.value)}
               placeholder="0x…"
               size={44}
@@ -657,7 +673,9 @@ function PreflightAndDispersePanels({
             <span className="input-label">Recipient 2</span>
             <input
               className="field-input"
-              value={recipient2}
+              value={focus2 || !hideFullAddresses ? recipient2 : maskAddress(recipient2)}
+              onFocus={() => setFocus2(true)}
+              onBlur={() => setFocus2(false)}
               onChange={(e) => setRecipient2(e.target.value)}
               placeholder="0x… (optional)"
               size={44}
@@ -670,6 +688,34 @@ function PreflightAndDispersePanels({
               size={8}
             />
           </div>
+          
+          {/* Masking controls and previews */}
+          <div style={{ marginTop: 12, padding: "8px 12px", border: "1px dashed var(--rule)", borderRadius: "2px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <input
+                type="checkbox"
+                id="toggle-masking"
+                checked={hideFullAddresses}
+                onChange={(e) => setHideFullAddresses(e.target.checked)}
+                style={{ cursor: "pointer" }}
+              />
+              <label htmlFor="toggle-masking" style={{ fontSize: "11px", cursor: "pointer", color: "var(--ink-mid)" }}>
+                Hide full addresses in input fields (display mask only)
+              </label>
+            </div>
+            
+            <div style={{ fontSize: "11px", color: "var(--ink-faint)", lineHeight: "1.4" }}>
+              <strong>Recipients preview (display only):</strong>
+              <div style={{ fontFamily: "monospace", marginTop: 4 }}>
+                <div>Recipient 1: {maskAddress(recipient1)}</div>
+                <div>Recipient 2: {maskAddress(recipient2)}</div>
+              </div>
+              <div style={{ marginTop: 6, fontStyle: "italic", fontSize: "10px" }}>
+                “Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.”
+              </div>
+            </div>
+          </div>
+
           <p className="info-note">Mode: direct (fixed for this execution)</p>
           <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center" }}>
             <button className="btn" onClick={() => setPreflightEnabled(true)} disabled={recipients.length === 0}>
@@ -788,7 +834,7 @@ function BoundaryPanel() {
         </div>
         <div className="boundary-item">
           <span className="boundary-bullet">▸</span>
-          <span>Recipient addresses are masked in UI only — not a cryptographic privacy claim</span>
+          <span>Wallet and recipient addresses are masked for display only. This is not a cryptographic privacy claim.</span>
         </div>
         <div className="boundary-item">
           <span className="boundary-bullet">▸</span>
@@ -868,7 +914,7 @@ function EvidenceLogPanel({ log }: { log: EvidenceEntry[] }) {
                   <td>{entry.timestamp.slice(11, 19)}</td>
                   <td>{entry.action}</td>
                   <td><span className={labelClass(entry.label)}>{entry.label}</span></td>
-                  <td>{entry.result}</td>
+                  <td>{entry.result ? maskHexAddresses(entry.result) : ""}</td>
                   <td>{entry.txHash ? `${entry.txHash.slice(0, 10)}…` : "—"}</td>
                   <td>
                     <button className="btn btn-sm" onClick={() => copyRaw(entry)}>Copy</button>
